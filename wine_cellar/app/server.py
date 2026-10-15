@@ -20,6 +20,9 @@ from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, quote, urlparse
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import pairing  # noqa: E402
+
 DB_TYPE = os.environ.get("DB_TYPE", "postgres")
 PORT = int(os.environ.get("PORT", "8099"))
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -415,6 +418,23 @@ WINE_SELECT = (
 def list_wines():
     rows = db.run(WINE_SELECT + " ORDER BY w.id", fetch="all")
     return [wine_json(r) for r in rows]
+
+
+def wine_pairing(wid):
+    r = get_wine(wid)
+    p = pairing.profile(r)
+    return {"style": pairing.describe(p), "dishes": pairing.best_dishes(p, 6), "status": pairing.drink_status(r)}
+
+
+def pairing_find(dish):
+    rows = db.run(WINE_SELECT + " ORDER BY w.id", fetch="all")
+    found = pairing.find_wines(dish, rows)
+    if found is None:
+        raise ApiError(404, "Unknown dish")
+    byid = {r["id"]: r for r in rows}
+    for f in found:
+        f["wine"] = wine_json(byid[f["id"]])
+    return {"dish": dish, "wines": found}
 
 
 def get_wine(wid):
@@ -1375,10 +1395,16 @@ class Handler(BaseHTTPRequestHandler):
                 if not found:
                     raise ApiError(404, "No picture found online for this wine. You can add your own photo.")
                 return self._send(200, wine_json(get_wine(wid)))
+            if len(parts) == 3 and parts[2] == "pairing" and method == "GET":
+                return self._send(200, wine_pairing(wid))
             if len(parts) == 3 and parts[2] == "sb" and method == "POST":
                 return self._send(200, sb_check(wid))
         if len(parts) == 3 and parts[:2] == ["sb", "debug"] and parts[2].isdigit() and method == "GET":
             return self._send(200, sb_debug(int(parts[2])))
+        if parts == ["pairing", "dishes"] and method == "GET":
+            return self._send(200, {"dishes": pairing.search_dishes(q.get("q", [""])[0])})
+        if parts == ["pairing", "find"] and method == "GET":
+            return self._send(200, pairing_find(q.get("dish", [""])[0]))
         if parts == ["config"] and method == "GET":
             return self._send(200, app_config())
         if parts == ["sb", "refresh"] and method == "POST":

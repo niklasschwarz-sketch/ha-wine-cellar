@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.0
+- Food and wine pairing: every bottle's page has a **Goes well with** list (best dishes, with a score and the reason), worked out on your own system from grape, region, colour, sweetness, age and style. Nothing is sent over the internet.
+- **More → Dinner pairing**: pick or search a dish (about 40, with Swedish words such as lamm, torsk, ost) and see which bottles in your cellar suit it best. Bottles that should be drunk soon rank a little higher, bottles not ready yet a little lower.
+- Bottle pages link to Vivino and Wine-Searcher to look up the wine and its price
+
 ## 0.7.1
 - Pictures can be pasted: copy an image anywhere (a web page, a screenshot, a photo app) and press Ctrl+V (⌘+V on a Mac) in the picture dialog or the add/edit form, or use the new **Paste image** button
 - Image files can also be dragged onto the picture dialog or the form

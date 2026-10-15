@@ -71,6 +71,9 @@ Use **Scan bottle**. A USB/Bluetooth scanner types the number into the box. The 
 ## Systembolaget prices
 Once a week the add-on downloads the public mirror of Systembolaget's assortment (github.com/AlexGustafsson/systembolaget-api-data, about 30 MB) and keeps only the wines in a small table. Each of your wines is matched strictly on producer, wine name, vintage and bottle size. Many wines (especially small French producers) are not sold there and will show no price. Prices are in kr; `eur_sek_rate` converts them for "Use as current value". Turn it off with `systembolaget_prices`.
 
+## Food and wine pairing
+Open a bottle: **Goes well with** lists the dishes that suit it best (score 80 and up is excellent, 68 and up good). **More → Dinner pairing** works the other way round: search or pick a dish and see your best bottles for it, with drink-soon bottles lifted a little. The suggestions come from rules built into the add-on (grape, region, weight, acidity, tannin, sweetness, age and classic matches), so they work offline and are a guide, not a promise. Sauces and spices change a dish, and a wine with no grape or region filled in is judged on colour and style only.
+
 ## Edit table
 **Edit table** opens the whole cellar as a spreadsheet. Type in any cell, or use the + and − next to the bottle count. Enter and the up/down arrows move between rows, Tab moves right and adds a row after the last cell. You can paste rows straight from Excel or Google Sheets (column order: vintage, producer, wine, colour, style, country, region, appellation, grape, bottles, paid, value, drink from, drink to, shelf). Ctrl/Cmd+D copies the cell above.
 Tick rows to add or remove a bottle on all of them, duplicate them, or delete them. Changed cells are highlighted. Nothing is saved until you press Save (or Ctrl/Cmd+S); Discard throws the changes away. Bottle changes show up in the activity list as added or removed.

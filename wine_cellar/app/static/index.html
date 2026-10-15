@@ -125,6 +125,14 @@ dialog::backdrop{background:rgba(0,0,0,.4);backdrop-filter:blur(4px)}
 .dl dt{color:var(--muted)}
 .dl dd{margin:0;overflow-wrap:anywhere}
 .hist{display:grid;gap:6px;font-size:.9rem}
+.pair{display:grid;gap:8px;font-size:.92rem}
+.pair .row{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.pair .row b{font-weight:600}
+.lvl{display:inline-block;min-width:2.6rem;text-align:center;padding:1px 8px;border-radius:999px;font-size:.78rem;font-variant-numeric:tabular-nums;background:var(--fill)}
+.lvl.x{background:#34c759;color:#fff}.lvl.g{background:#a8d672;color:#173}
+.dishes{display:flex;flex-wrap:wrap;gap:6px}
+.dishes .chip{min-height:36px;padding:0 12px;font-size:.9rem}
+.gl{font-size:.8rem;color:var(--muted);margin:10px 0 4px}
 .photo[hidden]{display:none}
 .dropping{outline:3px dashed var(--blue);outline-offset:3px;border-radius:12px}
 .photo{display:block;max-width:100%;max-height:18rem;margin:0 auto;border-radius:12px;background:#fff;object-fit:contain}
@@ -323,6 +331,7 @@ details.more .charts{margin-top:12px}
         <div class="menu" id="moreMenu" role="menu" hidden>
           <button id="tableBtn" role="menuitem" type="button" title="Spreadsheet view to add, change and remove many wines and bottles at once">Edit table</button>
           <button id="menuBtn" role="menuitem" type="button" title="Restaurant-style wine list">Wine list</button>
+          <button id="pairBtn" role="menuitem" type="button" title="Pick a dish and see which of your bottles go with it">Dinner pairing</button>
           <button id="statsBtn" role="menuitem" type="button" title="Charts and numbers for the whole cellar">Stats</button>
           <button id="importBtn" role="menuitem" type="button" title="Export your cellar, or import a CSV">Import / export</button>
           <button id="racksBtn" role="menuitem" type="button" hidden>Racks</button>
@@ -934,9 +943,24 @@ details.more .charts{margin-top:12px}
       sbBtns.appendChild(h('a', { 'class': 'btn', href: 'https://www.systembolaget.se/sok/?q=' + encodeURIComponent(r.sb.number), target: '_blank', rel: 'noopener noreferrer', text: 'Search on systembolaget.se' }));
     }
     var hist = h('div', { 'class': 'hist' }, h('span', { 'class': 'note', text: 'Loading history…' }));
+    var pairBox = h('div', { 'class': 'pair' }, h('span', { 'class': 'note', text: 'Thinking about food…' }));
+    var vq = encodeURIComponent((r.producer + ' ' + (r.name || '') + ' ' + (r.vint === 'NV' ? '' : r.vint)).trim());
+    var priceLinks = h('div', { 'class': 'pick' }, h('div', { 'class': 'pickrow', style: 'display:flex;gap:8px;flex-wrap:wrap' },
+      h('a', { 'class': 'btn', href: 'https://www.vivino.com/search/wines?q=' + vq, target: '_blank', rel: 'noopener noreferrer', text: 'Look up on Vivino' }),
+      h('a', { 'class': 'btn', href: 'https://www.wine-searcher.com/find/' + encodeURIComponent((r.producer + ' ' + (r.name || '')).trim().replace(/\s+/g, '+')) + (r.vint === 'NV' ? '' : '/' + r.vint), target: '_blank', rel: 'noopener noreferrer', text: 'Check price on Wine-Searcher' })));
     var body = h('div', { 'class': 'f', style: 'gap:14px' },
       r.img ? h('img', { 'class': 'photo', alt: 'Picture of ' + wineTitle(r), src: picUrl(r) }) : null,
-      h('dl', { 'class': 'dl' }, rowsDl), sbBtns, sbMsg, h('div', { 'class': 'f' }, h('div', { 'class': 'lab', text: 'History' }), hist));
+      h('dl', { 'class': 'dl' }, rowsDl), sbBtns, sbMsg, priceLinks,
+      h('div', { 'class': 'f' }, h('div', { 'class': 'lab', text: 'Goes well with' }), pairBox),
+      h('div', { 'class': 'f' }, h('div', { 'class': 'lab', text: 'History' }), hist));
+    api('GET', 'api/wines/' + r.id + '/pairing').then(function (d) {
+      pairBox.replaceChildren(h('div', { 'class': 'note', text: d.style }));
+      d.dishes.forEach(function (x) {
+        pairBox.appendChild(h('div', { 'class': 'row' }, lvlBadge(x.score), h('b', { text: x.label }),
+          h('span', { 'class': 'note', text: x.why.join(', ') })));
+      });
+      pairBox.appendChild(h('div', { 'class': 'note', text: 'A guide from grape, region and style, not a promise. Sauces and spices change things.' }));
+    }).catch(function () { pairBox.replaceChildren(h('span', { 'class': 'note', text: 'Pairing suggestions are only available in the installed add-on.' })); });
     api('GET', 'api/checkins?limit=10&wine=' + r.id).then(function (d) {
       hist.replaceChildren();
       if (!d.checkins.length) { hist.appendChild(h('span', { 'class': 'note', text: 'Nothing logged for this wine yet.' })); return; }
@@ -948,6 +972,42 @@ details.more .charts{margin-top:12px}
       });
     }).catch(function () { hist.replaceChildren(h('span', { 'class': 'note', text: 'History is not available in this preview.' })); });
     openSheet(wineTitle(r), body, [h('button', { type: 'button', 'class': 'btn', text: 'Edit', onclick: function () { openWineForm(r); } }), (rackData.racks.length && r.qty) ? h('button', { type: 'button', 'class': 'btn', text: 'Find in rack', onclick: function () { dlg.close(); openRacks(r.id); } }) : null, r.qty ? h('button', { type: 'button', 'class': 'btn primary', text: 'Open one', onclick: function () { openDrinkSheet(r); } }) : null]);
+  }
+  function lvlBadge(sc) { return h('span', { 'class': 'lvl ' + (sc >= 80 ? 'x' : sc >= 68 ? 'g' : ''), text: String(sc), title: sc >= 80 ? 'Excellent match' : sc >= 68 ? 'Good match' : 'Possible match' }); }
+  function openPairSheet(dishKey) {
+    var list = h('div', { 'class': 'f' }), res = h('div', { 'class': 'f' }), q = h('input', { type: 'search', 'class': 'in', placeholder: 'Search a dish, e.g. lamb, curry, torsk, ost', 'aria-label': 'Search a dish', style: 'width:100%;min-height:44px;padding:0 14px;border-radius:12px' });
+    var dishes = [], cur = dishKey || null;
+    function showDishes() {
+      var term = q.value.trim().toLowerCase();
+      api('GET', 'api/pairing/dishes?q=' + encodeURIComponent(term)).then(function (d) {
+        dishes = d.dishes; list.replaceChildren();
+        if (!dishes.length) { list.appendChild(h('span', { 'class': 'note', text: 'No dish found. Try a simpler word.' })); return; }
+        var group = null, box = null;
+        dishes.forEach(function (x) {
+          if (x.group !== group) { group = x.group; list.appendChild(h('div', { 'class': 'gl', text: group })); box = h('div', { 'class': 'dishes' }); list.appendChild(box); }
+          box.appendChild(h('button', { type: 'button', 'class': 'chip', 'aria-pressed': cur === x.key ? 'true' : 'false', title: x.examples, text: x.label, onclick: function () { cur = x.key; showDishes(); showWines(); } }));
+        });
+      }).catch(function () { list.replaceChildren(h('span', { 'class': 'note', text: 'Pairing is only available in the installed add-on.' })); });
+    }
+    function showWines() {
+      if (!cur) { res.replaceChildren(h('span', { 'class': 'note', text: 'Pick a dish to see the best bottles in your cellar.' })); return; }
+      res.replaceChildren(h('span', { 'class': 'note', text: 'Looking through the cellar…' }));
+      api('GET', 'api/pairing/find?dish=' + encodeURIComponent(cur)).then(function (d) {
+        res.replaceChildren();
+        if (!d.wines.length) { res.appendChild(h('span', { 'class': 'note', text: 'No bottles in stock.' })); return; }
+        d.wines.forEach(function (x) {
+          var r = rows.find(function (y) { return y.id === x.wine.id; });
+          if (!r) return;
+          var tag = x.status === 'soon' || x.status === 'past' ? 'drink soon' : x.status === 'hold' ? 'not ready yet' : '';
+          res.appendChild(h('button', { type: 'button', 'class': 'btn', style: 'justify-content:flex-start;text-align:left;height:auto;min-height:48px;padding:8px 14px;border-radius:14px;gap:10px', onclick: function () { openInfoSheet(r); } },
+            lvlBadge(x.score), h('span', {}, h('b', { text: wineTitle(r) }), h('span', { 'class': 'note', text: '  ' + r.qty + ' bottle' + (r.qty === 1 ? '' : 's') + (tag ? ' · ' + tag : '') }),
+              h('div', { 'class': 'note', text: x.why.join(', ') }))));
+        });
+      }).catch(function (e) { res.replaceChildren(h('span', { 'class': 'note', text: e.message })); });
+    }
+    var t = null; q.addEventListener('input', function () { clearTimeout(t); t = setTimeout(showDishes, 200); });
+    openSheet('Dinner pairing', h('div', { 'class': 'f', style: 'gap:12px' }, q, list, h('div', { 'class': 'lab', text: 'Your best bottles for it' }), res), [h('button', { type: 'button', 'class': 'btn', text: 'Close', onclick: function () { dlg.close(); } })]);
+    showDishes(); showWines();
   }
   function openDeleteSheet(r) {
     var err = h('div', { 'class': 'err' });
@@ -1443,6 +1503,7 @@ details.more .charts{margin-top:12px}
   /* Racks screen is built and tested but switched off for now: remove the hidden attribute on #racksBtn to bring it back. */
   $('racksBtn').addEventListener('click', function () { openRacks(); });
   $('statsBtn').addEventListener('click', openStats);
+  $('pairBtn').addEventListener('click', function () { openPairSheet(); });
   $('tableBtn').addEventListener('click', openTable);
   $('chartsBox').addEventListener('toggle', render);
   var layout = $('layout');

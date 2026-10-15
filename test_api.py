@@ -165,6 +165,36 @@ try:
     s, e = call("DELETE", "/api/wines/99999")
     check("unknown wine 404", s == 404, e)
 
+    # ---- food and wine pairing
+    def mk(**k):
+        d = {"vintage": 2018, "quantity": 2, "begin_consume": 2015, "end_consume": 2040}
+        d.update(k)
+        return call("POST", "/api/wines", d)[1]["id"]
+    cab = mk(producer="P1", wine="Cab", color="Red", varietal="Cabernet Sauvignon", region="Napa Valley", country="USA")
+    chab = mk(producer="P2", wine="Chablis", color="White", varietal="Chardonnay", region="Chablis", country="France")
+    sau = mk(producer="P3", wine="Sauternes", color="White", region="Sauternes", country="France", style="Sweet")
+    rie = mk(producer="P4", wine="Riesling", color="White", varietal="Riesling", region="Mosel", country="Germany")
+    s, pr = call("GET", "/api/wines/%d/pairing" % cab)
+    labels = [x["label"] for x in pr["dishes"]]
+    check("cabernet pairs with red meat", s == 200 and any(k in " ".join(labels).lower() for k in ("beef", "lamb", "steak")), labels)
+    s, pr = call("GET", "/api/wines/%d/pairing" % chab)
+    check("chablis pairs with seafood", "shellfish" in [x["key"] for x in pr["dishes"][:3]], [x["key"] for x in pr["dishes"]])
+    s, fd = call("GET", "/api/pairing/dishes?q=lamb")
+    check("dish search", s == 200 and fd["dishes"] and fd["dishes"][0]["key"] == "lamb", fd)
+    s, fd = call("GET", "/api/pairing/dishes")
+    check("dish list has groups", len(fd["dishes"]) >= 30 and all(x["group"] for x in fd["dishes"]), len(fd["dishes"]))
+    s, f = call("GET", "/api/pairing/find?dish=lamb")
+    check("find ranks the cabernet above the chablis", s == 200 and f["wines"][0]["id"] == cab, [x["id"] for x in f["wines"]])
+    s, f = call("GET", "/api/pairing/find?dish=shellfish")
+    check("shellfish picks chablis first", f["wines"][0]["id"] == chab, [x["id"] for x in f["wines"]])
+    check("find returns wine data", f["wines"][0]["wine"]["producer"] == "P2")
+    s, f = call("GET", "/api/pairing/find?dish=nope")
+    check("unknown dish is 404", s == 404, f)
+    s, e = call("GET", "/api/wines/99999/pairing")
+    check("pairing for unknown wine is 404", s == 404, e)
+    for i in (cab, chab, sau, rie):
+        call("DELETE", "/api/wines/%d" % i)
+
     # ---- page and unknown paths
     with urllib.request.urlopen(BASE + "/", timeout=5) as r:
         html = r.read().decode()
