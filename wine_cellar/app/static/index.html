@@ -126,6 +126,7 @@ dialog::backdrop{background:rgba(0,0,0,.4);backdrop-filter:blur(4px)}
 .dl dd{margin:0;overflow-wrap:anywhere}
 .hist{display:grid;gap:6px;font-size:.9rem}
 .photo[hidden]{display:none}
+.dropping{outline:3px dashed var(--blue);outline-offset:3px;border-radius:12px}
 .photo{display:block;max-width:100%;max-height:18rem;margin:0 auto;border-radius:12px;background:#fff;object-fit:contain}
 .note{font-size:.85rem;color:var(--muted)}
 .note a{color:var(--blue)}
@@ -839,8 +840,10 @@ details.more .charts{margin-top:12px}
 
   /* ---------- sheets ---------- */
   var dlg = $('sheet');
+  var pasteTarget = null; /* set by a dialog that accepts a pasted or dropped image */
   dlg.addEventListener('click', function (e) { if (e.target === dlg) dlg.close(); });
   function openSheet(title, body, footer) {
+    pasteTarget = null;
     dlg.replaceChildren(h('div', { 'class': 'sheet' },
       h('div', { 'class': 'sh' }, h('h2', { text: title }), h('button', { type: 'button', 'class': 'btn ghost sm', text: 'Close', onclick: function () { dlg.close(); } })),
       h('div', { 'class': 'sb' }, body), footer ? h('div', { 'class': 'sf' }, footer) : null));
@@ -1070,15 +1073,17 @@ details.more .charts{margin-top:12px}
     var photoBtn = h('button', { type: 'button', 'class': 'btn', text: 'Take or choose a photo', onclick: function () { fileIn.click(); } });
     var photoErr = h('div', { 'class': 'err' });
     var ocrBox = h('div', { 'class': 'f' }), readBtn = h('button', { type: 'button', 'class': 'btn', text: 'Read the label', hidden: true, onclick: function () { if (photoBlob) readLabel(photoBlob); } });
-    fileIn.addEventListener('change', function () {
-      var f = fileIn.files[0]; fileIn.value = ''; if (!f) return;
+    function takeFile(f) {
       photoErr.textContent = '';
       shrink(f, 1600).then(function (b) { photoBlob = b; showPrev(URL.createObjectURL(b)); if (foundChk) { foundChk.checked = false; useFound = false; } ocrAvailable().then(function (ok) { readBtn.hidden = !ok; if (ok && adding && !ex) readLabel(b); }); })
         .catch(function (e) { photoErr.textContent = e.message; });
-    });
-    var photoBox = h('div', { 'class': 'f' }, h('div', { 'class': 'lab', text: 'Picture' }), prev, photoBtn, readBtn,
+    }
+    fileIn.addEventListener('change', function () { var f = fileIn.files[0]; fileIn.value = ''; if (f) takeFile(f); });
+    var photoBox = h('div', { 'class': 'f' }, h('div', { 'class': 'lab', text: 'Picture' }), prev, photoBtn, pasteButton(takeFile, photoErr), readBtn,
       foundChk ? h('label', { 'class': 'note', 'for': 'f_found', style: 'display:flex;gap:8px;align-items:center' }, foundChk, 'Use the picture found online') : null,
+      h('p', { 'class': 'note', text: 'You can also paste an image (Ctrl/⌘+V) or drop an image file here.' }),
       !cur && !foundChk ? h('p', { 'class': 'note', text: 'Without a photo the app looks for a picture online.' }) : null, fileIn, photoErr);
+    allowDrop(photoBox, takeFile);
 
     var err = h('div', { 'class': 'err' });
     var intro = null;
@@ -1200,6 +1205,7 @@ details.more .charts{margin-top:12px}
       }).catch(function (e) { err.textContent = e.message; save.disabled = false; });
     } });
     openSheet(edit ? 'Edit wine' : (ex ? 'Add bottles' : (pre.ean ? 'Add scanned bottle' : 'Add a wine')), body, [h('button', { type: 'button', 'class': 'btn', text: 'Cancel', onclick: function () { dlg.close(); } }), save]);
+    pasteTarget = takeFile;
   }
 
   /* ---------- pictures ---------- */
@@ -1213,6 +1219,46 @@ details.more .charts{margin-top:12px}
     } else b.innerHTML = BOTTLE;
     b.style.setProperty('--c', COLOR_HEX[r.color] || '#8a8a8a');
     return b;
+  }
+  /* paste and drop an image: Ctrl/Cmd+V, a Paste button, or drag a file onto the dialog */
+  function imageIn(dt) {
+    if (!dt) return null;
+    var i, files = dt.files || [], items = dt.items || [];
+    for (i = 0; i < files.length; i++) if (/^image\//.test(files[i].type)) return files[i];
+    for (i = 0; i < items.length; i++) if (items[i].kind === 'file' && /^image\//.test(items[i].type)) return items[i].getAsFile();
+    return null;
+  }
+  document.addEventListener('paste', function (e) {
+    if (!pasteTarget) return;
+    var f = imageIn(e.clipboardData); if (!f) return; /* plain text pastes still go to the field */
+    e.preventDefault(); pasteTarget(f);
+  });
+  dlg.addEventListener('close', function () { pasteTarget = null; });
+  function allowDrop(el, onFile) {
+    el.addEventListener('dragover', function (e) {
+      var t = e.dataTransfer && e.dataTransfer.types ? Array.prototype.slice.call(e.dataTransfer.types) : [];
+      if (t.indexOf('Files') >= 0) { e.preventDefault(); el.classList.add('dropping'); }
+    });
+    el.addEventListener('dragleave', function () { el.classList.remove('dropping'); });
+    el.addEventListener('drop', function (e) {
+      el.classList.remove('dropping');
+      var f = imageIn(e.dataTransfer); if (!f) return;
+      e.preventDefault(); onFile(f);
+    });
+  }
+  function pasteButton(onFile, msg) {
+    var hint = 'Copy an image first, then press Ctrl+V (⌘+V on a Mac) in this window.';
+    return h('button', { type: 'button', 'class': 'btn', text: 'Paste image', title: 'Paste an image you have copied (Ctrl/⌘+V works too)', onclick: function () {
+      msg.textContent = '';
+      if (!navigator.clipboard || !navigator.clipboard.read) { msg.textContent = hint; return; }
+      navigator.clipboard.read().then(function (items) {
+        for (var i = 0; i < items.length; i++) {
+          var type = Array.prototype.filter.call(items[i].types, function (t) { return /^image\//.test(t); })[0];
+          if (type) { items[i].getType(type).then(function (b) { onFile(new File([b], 'pasted-image', { type: b.type })); }); return; }
+        }
+        msg.textContent = 'There is no image on the clipboard. ' + hint;
+      }).catch(function () { msg.textContent = hint; });
+    } });
   }
   function shrink(file, max) {
     return new Promise(function (resolve, reject) {
@@ -1244,13 +1290,16 @@ details.more .charts{margin-top:12px}
     }
     var take = h('button', { type: 'button', 'class': 'btn primary', text: 'Take or choose a photo', onclick: function () { file.click(); } });
     var find = h('button', { type: 'button', 'class': 'btn', text: 'Find a picture online', onclick: function () { busy(find, 'Searching…', function () { return api('POST', 'api/wines/' + r.id + '/image/search'); }); } });
-    file.addEventListener('change', function () {
-      var f = file.files[0]; file.value = ''; if (!f) return;
+    function saveFile(f) {
       busy(take, 'Saving…', function () { return shrink(f, 1000).then(function (b) { return api('PUT', 'api/wines/' + r.id + '/image', null, b, 'image/jpeg'); }); });
-    });
+    }
+    file.addEventListener('change', function () { var f = file.files[0]; file.value = ''; if (f) saveFile(f); });
     var rm = r.img ? h('button', { type: 'button', 'class': 'btn danger', text: 'Remove picture', onclick: function () { busy(rm, 'Removing…', function () { return api('DELETE', 'api/wines/' + r.id + '/image'); }); } }) : null;
-    body.appendChild(h('div', { 'class': 'pick' }, take, find, rm)); body.appendChild(file); body.appendChild(msg);
+    body.appendChild(h('div', { 'class': 'pick' }, take, pasteButton(saveFile, msg), find, rm)); body.appendChild(file);
+    body.appendChild(h('p', { 'class': 'note', text: 'You can also paste an image (Ctrl/⌘+V) or drop an image file on this window.' })); body.appendChild(msg);
+    allowDrop(body, saveFile);
     openSheet(wineTitle(r), body);
+    pasteTarget = saveFile;
   }
 
   /* ---------- barcode scan ---------- */

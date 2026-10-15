@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.1
+- Pictures can be pasted: copy an image anywhere (a web page, a screenshot, a photo app) and press Ctrl+V (⌘+V on a Mac) in the picture dialog or the add/edit form, or use the new **Paste image** button
+- Image files can also be dragged onto the picture dialog or the form
+- Browser tests added (`test_ui.py`)
+
 ## 0.7.0
 - No database to set up: a new install keeps your cellar in its own file inside the add-on, which Home Assistant backups include. Install, start, open.
 - Postgres is now optional (`db_type: postgres`), for example for Grafana. An existing install that has a database password keeps using Postgres when it updates.
