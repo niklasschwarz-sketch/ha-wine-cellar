@@ -4,6 +4,13 @@ For installs that ran Wine Cellar on a Postgres add-on and want to switch to the
 
 Names used below are the defaults: Postgres add-on host `db21ed7f-postgres-latest`, database and login `winecellar`, Wine Cellar installed from `/local_apps`. Change them if yours differ.
 
+## Short way: start fresh from your CellarTracker file
+If the data in Postgres is not needed (you still have the CSV you exported from CellarTracker), skip the safety copies and the trial:
+1. Update the add-on (phase B), then set `db_type` to `sqlite`, save and restart (phase C step 1).
+2. **Import / export** → Import a CSV file → choose the CellarTracker CSV. Check the wine and bottle counts against CellarTracker.
+3. Clear `db_password`, keep `db_type` on `sqlite`, restart. The old Postgres database and Grafana dashboard can stay untouched until you decide to remove them (phase E).
+Check-ins, ratings you logged in the app, your own pictures and rack positions from the old database are not carried over.
+
 ## What moves and what does not
 The CSV export carries every wine with bottle counts, prices, values, drinking windows, location, notes and barcodes. It does not carry the check-in history (drink log and ratings), pictures you uploaded yourself, or rack positions. Pictures found automatically are looked up again after the switch. In a rehearsal with a CellarTracker-style file and a wine added in the app, all wine fields came across identical and a second import changed nothing.
 
