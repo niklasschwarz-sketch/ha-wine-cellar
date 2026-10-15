@@ -125,7 +125,34 @@ dialog::backdrop{background:rgba(0,0,0,.4);backdrop-filter:blur(4px)}
 .dl dt{color:var(--muted)}
 .dl dd{margin:0;overflow-wrap:anywhere}
 .hist{display:grid;gap:6px;font-size:.9rem}
+.climate{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}
+.climate[hidden]{display:none}
+.cl{appearance:none;border:0;cursor:pointer;display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;border-radius:999px;background:var(--fill);font:inherit}
+.cl b{font-variant-numeric:tabular-nums}
+.cl small{opacity:.65}
+.cl.ok{box-shadow:inset 0 0 0 2px #34c759}.cl.low,.cl.high{box-shadow:inset 0 0 0 2px #ff9f0a;background:rgba(255,159,10,.12)}.cl.offline,.cl.unavailable{opacity:.6}
+.occ{display:grid;gap:6px;font-size:.92rem}
+.occ .row{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.rv{display:grid;gap:4px;padding:8px 0;border-top:1px solid var(--fill);font-size:.92rem}
+.rv:first-child{border-top:0}
+.score{display:inline-block;min-width:2.4rem;text-align:center;padding:1px 8px;border-radius:8px;background:var(--fill);font-variant-numeric:tabular-nums;font-weight:600}
+.form2{display:grid;gap:8px;grid-template-columns:1fr 1fr}
+.form2 .wide{grid-column:1/-1}
+.lbls{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.lbl{border:1px dashed #999;padding:6px;text-align:center;font-size:11px;line-height:1.2;background:#fff;color:#000;break-inside:avoid;overflow:hidden}
+.lbl svg{width:100%;height:40px;display:block}
+.lbl b{display:block;font-size:11px}
+body.printlabels .wc,body.printlabels .toast{display:none!important}
+.pair{display:grid;gap:8px;font-size:.92rem}
+.pair .row{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.pair .row b{font-weight:600}
+.lvl{display:inline-block;min-width:2.6rem;text-align:center;padding:1px 8px;border-radius:999px;font-size:.78rem;font-variant-numeric:tabular-nums;background:var(--fill)}
+.lvl.x{background:#34c759;color:#fff}.lvl.g{background:#a8d672;color:#173}
+.dishes{display:flex;flex-wrap:wrap;gap:6px}
+.dishes .chip{min-height:36px;padding:0 12px;font-size:.9rem}
+.gl{font-size:.8rem;color:var(--muted);margin:10px 0 4px}
 .photo[hidden]{display:none}
+.dropping{outline:3px dashed var(--blue);outline-offset:3px;border-radius:12px}
 .photo{display:block;max-width:100%;max-height:18rem;margin:0 auto;border-radius:12px;background:#fff;object-fit:contain}
 .note{font-size:.85rem;color:var(--muted)}
 .note a{color:var(--blue)}
@@ -295,6 +322,11 @@ details.more .charts{margin-top:12px}
 @media (max-width:56rem){.layout{grid-template-columns:minmax(0,1fr)}.side{position:static;max-height:none}.title{font-size:1.7rem}}
 @media (max-width:40rem){.kpis{grid-template-columns:repeat(3,1fr);margin-bottom:10px}.kpis .card:nth-child(n+4){display:none}.kpis .kv{font-size:1.25rem}.tools h2{flex:0 0 100%}.tools .in#q{flex:0 0 100%;order:-1}.tools h2{order:-2}}
 @media print{
+  body.printlabels{background:#fff!important;padding:0}
+  body.printlabels dialog#sheet{position:static;width:auto;max-height:none;box-shadow:none;border-radius:0;overflow:visible;background:#fff}
+  body.printlabels dialog#sheet .sh,body.printlabels dialog#sheet .sf,body.printlabels .nolabelprint{display:none!important}
+  body.printlabels dialog#sheet .sb{overflow:visible;max-height:none;padding:0}
+  body.printlabels .lbl{border:1px dashed #bbb}
   body.printmenu{background:#fff!important;padding:0}
   body.printmenu .wc,body.printmenu .toast{display:none!important}
   body.printmenu dialog#menu{position:static;width:auto;max-height:none;box-shadow:none;border-radius:0;overflow:visible;background:#fff}
@@ -322,6 +354,8 @@ details.more .charts{margin-top:12px}
         <div class="menu" id="moreMenu" role="menu" hidden>
           <button id="tableBtn" role="menuitem" type="button" title="Spreadsheet view to add, change and remove many wines and bottles at once">Edit table</button>
           <button id="menuBtn" role="menuitem" type="button" title="Restaurant-style wine list">Wine list</button>
+          <button id="pairBtn" role="menuitem" type="button" title="Pick a dish and see which of your bottles go with it">Dinner pairing</button>
+          <button id="labelBtn" role="menuitem" type="button" title="Print barcode labels for your bottles">Bottle labels</button>
           <button id="statsBtn" role="menuitem" type="button" title="Charts and numbers for the whole cellar">Stats</button>
           <button id="importBtn" role="menuitem" type="button" title="Export your cellar, or import a CSV">Import / export</button>
           <button id="racksBtn" role="menuitem" type="button" hidden>Racks</button>
@@ -338,6 +372,13 @@ details.more .charts{margin-top:12px}
     <div class="card"><div class="kl">Estimated value</div><div class="kv" id="k-value"></div><div class="ks" id="k-value-s"></div></div>
     <div class="card"><div class="kl">Paid vs worth now</div><div class="kv" id="k-paid"></div><div class="ks" id="k-paid-s"></div></div>
     <div class="card"><div class="kl">Ready to drink now</div><div class="kv" id="k-ready"></div><div class="ks" id="k-ready-s"></div></div>
+  </section>
+
+  <section class="climate" id="climate" aria-label="Cellar climate" hidden></section>
+
+  <section class="sec" id="occSec" hidden>
+    <h2>Coming up</h2>
+    <div class="soon" id="occ"></div>
   </section>
 
   <section class="sec" id="soonSec" hidden>
@@ -357,6 +398,7 @@ details.more .charts{margin-top:12px}
       <details class="fd"><summary><span>Grape</span><em class="badge" id="fb-varietal"></em></summary><div class="flist" id="f-varietal"></div></details>
       <details class="fd"><summary><span>Producer</span><em class="badge" id="fb-producer"></em></summary><div class="flist" id="f-producer"></div></details>
       <details class="fd"><summary><span>Vintage</span><em class="badge" id="fb-vintage"></em></summary><div class="flist" id="f-vintage"></div></details>
+      <div class="fg" id="f-tag-box" hidden><div class="fl">Tags</div><div class="chips" id="f-tag"></div></div>
       <div class="fg"><div class="chips" id="f-stock"></div></div>
     </aside>
     <div class="mainc">
@@ -411,7 +453,7 @@ details.more .charts{margin-top:12px}
   };
   var STATUS_ORDER = ['ready', 'hold', 'past', 'nowin'];
   var STYLE_ORDER = ['Dry', 'Off-dry', 'Sparkling', 'Sweet'];
-  var DIM_LABEL = { color: 'Colour', style: 'Style', country: 'Country', region: 'Region', vintage: 'Vintage', status: 'Window', producer: 'Producer', varietal: 'Grape', appellation: 'Appellation' };
+  var DIM_LABEL = { color: 'Colour', style: 'Style', country: 'Country', region: 'Region', vintage: 'Vintage', status: 'Window', producer: 'Producer', varietal: 'Grape', appellation: 'Appellation', tag: 'Tag' };
   function vnum(r) { return r.vint === 'NV' ? -1 : r.vint; }
   var SORTS = {
     vintage_new: ['Vintage, newest first', function (a, b) { return vnum(b) - vnum(a) || a.producer.localeCompare(b.producer); }],
@@ -425,10 +467,14 @@ details.more .charts{margin-top:12px}
     color: function (r) { return r.color; }, style: function (r) { return r.style; }, country: function (r) { return r.country; },
     region: function (r) { return r.region; }, vintage: function (r) { return String(r.vint); }, status: function (r) { return r.status; },
     producer: function (r) { return r.producer; },
-    varietal: function (r) { return grapes(r); }, appellation: function (r) { return r.appellation; }
+    varietal: function (r) { return grapes(r); }, appellation: function (r) { return r.appellation; },
+    tag: function (r) { var t = tagMap[r.id] || []; return Array.from(new Set(t.map(function (x) { return TAGL[x.kind]; }))); }
   };
+  var tagMap = {};
+  var TAGL = { gift_received: 'Gift received', gift_given: 'Given as a gift', special: 'Special occasion' };
+  var OCCL = { birthday: 'Birthday', anniversary: 'Anniversary', wedding: 'Wedding', christmas: 'Christmas', graduation: 'Graduation', dinner: 'Dinner', other: 'Other' };
   function grapes(r) { return String(r.varietal || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean); }
-  var state = { color: new Set(), style: new Set(), country: new Set(), region: new Set(), vintage: new Set(), status: new Set(), producer: new Set(), varietal: new Set(), appellation: new Set(), q: '', sort: 'vintage_new', showEmpty: false };
+  var state = { color: new Set(), style: new Set(), country: new Set(), region: new Set(), vintage: new Set(), status: new Set(), producer: new Set(), varietal: new Set(), appellation: new Set(), tag: new Set(), q: '', sort: 'vintage_new', showEmpty: false };
 
   var fmtN = function (n) { return Math.round(n).toLocaleString('en'); };
   var eur0 = new Intl.NumberFormat('en', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
@@ -627,6 +673,9 @@ details.more .charts{margin-top:12px}
       listFilter($('f-' + d[0]), d[0], ents);
       $('fb-' + d[0]).textContent = state[d[0]].size ? String(state[d[0]].size) : '';
     });
+    var tt = tally(sub(all, 'tag'), 'tag'); state.tag.forEach(function (v) { if (!tt.has(v)) tt.set(v, 0); });
+    $('f-tag-box').hidden = !tt.size;
+    chips($('f-tag'), 'tag', Object.keys(TAGL).map(function (k) { return TAGL[k]; }).filter(function (l) { return tt.has(l); }).map(function (l) { return { value: l, label: l, count: tt.get(l) }; }));
     var w = tally(sub(all, 'status'), 'status');
     chips($('f-status'), 'status', STATUS_ORDER.filter(function (k) { return w.has(k) || state.status.has(k); }).map(function (k) { return { value: k, label: STATUS[k].label, count: w.get(k) || 0, hex: STATUS[k].hex }; }));
     var host = $('f-stock'); host.replaceChildren();
@@ -832,15 +881,17 @@ details.more .charts{margin-top:12px}
 
   function render() {
     hideTip();
-    drawKpis(); drawSoon(); drawChips(); drawBar();
+    drawKpis(); drawSoon(); drawOcc(); drawChips(); drawBar();
     if ($('chartsBox').open) { vintageChart($('c-vintage')); colourChart($('c-colour')); regionChart($('c-region')); windowChart($('c-window')); producerChart($('c-producer')); }
     drawActivity(); drawGrid();
   }
 
   /* ---------- sheets ---------- */
   var dlg = $('sheet');
+  var pasteTarget = null; /* set by a dialog that accepts a pasted or dropped image */
   dlg.addEventListener('click', function (e) { if (e.target === dlg) dlg.close(); });
   function openSheet(title, body, footer) {
+    pasteTarget = null;
     dlg.replaceChildren(h('div', { 'class': 'sheet' },
       h('div', { 'class': 'sh' }, h('h2', { text: title }), h('button', { type: 'button', 'class': 'btn ghost sm', text: 'Close', onclick: function () { dlg.close(); } })),
       h('div', { 'class': 'sb' }, body), footer ? h('div', { 'class': 'sf' }, footer) : null));
@@ -931,9 +982,25 @@ details.more .charts{margin-top:12px}
       sbBtns.appendChild(h('a', { 'class': 'btn', href: 'https://www.systembolaget.se/sok/?q=' + encodeURIComponent(r.sb.number), target: '_blank', rel: 'noopener noreferrer', text: 'Search on systembolaget.se' }));
     }
     var hist = h('div', { 'class': 'hist' }, h('span', { 'class': 'note', text: 'Loading history…' }));
+    var pairBox = h('div', { 'class': 'pair' }, h('span', { 'class': 'note', text: 'Thinking about food…' }));
+    var vq = encodeURIComponent((r.producer + ' ' + (r.name || '') + ' ' + (r.vint === 'NV' ? '' : r.vint)).trim());
+    var priceLinks = h('div', { 'class': 'pick' }, h('div', { 'class': 'pickrow', style: 'display:flex;gap:8px;flex-wrap:wrap' },
+      h('a', { 'class': 'btn', href: 'https://www.vivino.com/search/wines?q=' + vq, target: '_blank', rel: 'noopener noreferrer', text: 'Look up on Vivino' }),
+      h('a', { 'class': 'btn', href: 'https://www.wine-searcher.com/find/' + encodeURIComponent((r.producer + ' ' + (r.name || '')).trim().replace(/\s+/g, '+')) + (r.vint === 'NV' ? '' : '/' + r.vint), target: '_blank', rel: 'noopener noreferrer', text: 'Check price on Wine-Searcher' })));
     var body = h('div', { 'class': 'f', style: 'gap:14px' },
       r.img ? h('img', { 'class': 'photo', alt: 'Picture of ' + wineTitle(r), src: picUrl(r) }) : null,
-      h('dl', { 'class': 'dl' }, rowsDl), sbBtns, sbMsg, h('div', { 'class': 'f' }, h('div', { 'class': 'lab', text: 'History' }), hist));
+      h('dl', { 'class': 'dl' }, rowsDl), sbBtns, sbMsg, priceLinks,
+      h('div', { 'class': 'f' }, h('div', { 'class': 'lab', text: 'Goes well with' }), pairBox),
+      tagBlock(r), reviewBlock(r),
+      h('div', { 'class': 'f' }, h('div', { 'class': 'lab', text: 'History' }), hist));
+    api('GET', 'api/wines/' + r.id + '/pairing').then(function (d) {
+      pairBox.replaceChildren(h('div', { 'class': 'note', text: d.style }));
+      d.dishes.forEach(function (x) {
+        pairBox.appendChild(h('div', { 'class': 'row' }, lvlBadge(x.score), h('b', { text: x.label }),
+          h('span', { 'class': 'note', text: x.why.join(', ') })));
+      });
+      pairBox.appendChild(h('div', { 'class': 'note', text: 'A guide from grape, region and style, not a promise. Sauces and spices change things.' }));
+    }).catch(function () { pairBox.replaceChildren(h('span', { 'class': 'note', text: 'Pairing suggestions are only available in the installed add-on.' })); });
     api('GET', 'api/checkins?limit=10&wine=' + r.id).then(function (d) {
       hist.replaceChildren();
       if (!d.checkins.length) { hist.appendChild(h('span', { 'class': 'note', text: 'Nothing logged for this wine yet.' })); return; }
@@ -944,7 +1011,235 @@ details.more .charts{margin-top:12px}
         hist.appendChild(h('div', {}, h('span', { 'class': 'note', text: when + '  ' }), txt));
       });
     }).catch(function () { hist.replaceChildren(h('span', { 'class': 'note', text: 'History is not available in this preview.' })); });
-    openSheet(wineTitle(r), body, [h('button', { type: 'button', 'class': 'btn', text: 'Edit', onclick: function () { openWineForm(r); } }), (rackData.racks.length && r.qty) ? h('button', { type: 'button', 'class': 'btn', text: 'Find in rack', onclick: function () { dlg.close(); openRacks(r.id); } }) : null, r.qty ? h('button', { type: 'button', 'class': 'btn primary', text: 'Open one', onclick: function () { openDrinkSheet(r); } }) : null]);
+    openSheet(wineTitle(r), body, [h('button', { type: 'button', 'class': 'btn', text: 'Edit', onclick: function () { openWineForm(r); } }), h('button', { type: 'button', 'class': 'btn', text: 'Print label', onclick: function () { openLabelSheet([r]); } }), (rackData.racks.length && r.qty) ? h('button', { type: 'button', 'class': 'btn', text: 'Find in rack', onclick: function () { dlg.close(); openRacks(r.id); } }) : null, r.qty ? h('button', { type: 'button', 'class': 'btn primary', text: 'Open one', onclick: function () { openDrinkSheet(r); } }) : null]);
+  }
+  function lvlBadge(sc) { return h('span', { 'class': 'lvl ' + (sc >= 80 ? 'x' : sc >= 68 ? 'g' : ''), text: String(sc), title: sc >= 80 ? 'Excellent match' : sc >= 68 ? 'Good match' : 'Possible match' }); }
+  function openPairSheet(dishKey) {
+    var list = h('div', { 'class': 'f' }), res = h('div', { 'class': 'f' }), q = h('input', { type: 'search', 'class': 'in', placeholder: 'Search a dish, e.g. lamb, curry, torsk, ost', 'aria-label': 'Search a dish', style: 'width:100%;min-height:44px;padding:0 14px;border-radius:12px' });
+    var dishes = [], cur = dishKey || null;
+    function showDishes() {
+      var term = q.value.trim().toLowerCase();
+      api('GET', 'api/pairing/dishes?q=' + encodeURIComponent(term)).then(function (d) {
+        dishes = d.dishes; list.replaceChildren();
+        if (!dishes.length) { list.appendChild(h('span', { 'class': 'note', text: 'No dish found. Try a simpler word.' })); return; }
+        var group = null, box = null;
+        dishes.forEach(function (x) {
+          if (x.group !== group) { group = x.group; list.appendChild(h('div', { 'class': 'gl', text: group })); box = h('div', { 'class': 'dishes' }); list.appendChild(box); }
+          box.appendChild(h('button', { type: 'button', 'class': 'chip', 'aria-pressed': cur === x.key ? 'true' : 'false', title: x.examples, text: x.label, onclick: function () { cur = x.key; showDishes(); showWines(); } }));
+        });
+      }).catch(function () { list.replaceChildren(h('span', { 'class': 'note', text: 'Pairing is only available in the installed add-on.' })); });
+    }
+    function showWines() {
+      if (!cur) { res.replaceChildren(h('span', { 'class': 'note', text: 'Pick a dish to see the best bottles in your cellar.' })); return; }
+      res.replaceChildren(h('span', { 'class': 'note', text: 'Looking through the cellar…' }));
+      api('GET', 'api/pairing/find?dish=' + encodeURIComponent(cur)).then(function (d) {
+        res.replaceChildren();
+        if (!d.wines.length) { res.appendChild(h('span', { 'class': 'note', text: 'No bottles in stock.' })); return; }
+        d.wines.forEach(function (x) {
+          var r = rows.find(function (y) { return y.id === x.wine.id; });
+          if (!r) return;
+          var tag = x.status === 'soon' || x.status === 'past' ? 'drink soon' : x.status === 'hold' ? 'not ready yet' : '';
+          res.appendChild(h('button', { type: 'button', 'class': 'btn', style: 'justify-content:flex-start;text-align:left;height:auto;min-height:48px;padding:8px 14px;border-radius:14px;gap:10px', onclick: function () { openInfoSheet(r); } },
+            lvlBadge(x.score), h('span', {}, h('b', { text: wineTitle(r) }), h('span', { 'class': 'note', text: '  ' + r.qty + ' bottle' + (r.qty === 1 ? '' : 's') + (tag ? ' · ' + tag : '') }),
+              h('div', { 'class': 'note', text: x.why.join(', ') }))));
+        });
+      }).catch(function (e) { res.replaceChildren(h('span', { 'class': 'note', text: e.message })); });
+    }
+    var t = null; q.addEventListener('input', function () { clearTimeout(t); t = setTimeout(showDishes, 200); });
+    openSheet('Dinner pairing', h('div', { 'class': 'f', style: 'gap:12px' }, q, list, h('div', { 'class': 'lab', text: 'Your best bottles for it' }), res), [h('button', { type: 'button', 'class': 'btn', text: 'Close', onclick: function () { dlg.close(); } })]);
+    showDishes(); showWines();
+  }
+
+  /* ---------- tags and occasions ---------- */
+  function loadTags() { return api('GET', 'api/tags').then(function (d) { tagMap = {}; d.tags.forEach(function (t) { (tagMap[t.wineId] = tagMap[t.wineId] || []).push(t); }); }).catch(function () {}); }
+  function today0() { var n = new Date(); return new Date(n.getFullYear(), n.getMonth(), n.getDate()); }
+  function nextOccurrence(t) {
+    if (!t.date) return null;
+    var p = t.date.split('-').map(Number), td = today0(), d = new Date(p[0], p[1] - 1, p[2]);
+    if (t.yearly) { d = new Date(td.getFullYear(), p[1] - 1, p[2]); if (d < td) d = new Date(td.getFullYear() + 1, p[1] - 1, p[2]); }
+    return d >= td ? d : null;
+  }
+  function tagText(t) {
+    var parts = [TAGL[t.kind]];
+    if (t.occasion) parts.push(OCCL[t.occasion] || t.occasion);
+    if (t.who) parts.push((t.kind === 'gift_received' ? 'from ' : t.kind === 'gift_given' ? 'to ' : 'with ') + t.who);
+    if (t.date) parts.push(t.date + (t.yearly ? ' (every year)' : ''));
+    if (t.note) parts.push(t.note);
+    return parts.join(' · ');
+  }
+  function drawOcc() {
+    var items = [], td = today0();
+    rows.forEach(function (r) { if (r.qty > 0) (tagMap[r.id] || []).forEach(function (t) { var d = nextOccurrence(t); if (!d) return; var days = Math.round((d - td) / 864e5); if (days <= 45) items.push({ r: r, t: t, days: days }); }); });
+    items.sort(function (a, b) { return a.days - b.days; });
+    $('occSec').hidden = !items.length;
+    var host = $('occ'); host.replaceChildren();
+    items.slice(0, 6).forEach(function (x) {
+      var tile = h('div', { 'class': 'card tile' });
+      tile.style.setProperty('--c', COLOR_HEX[x.r.color] || '#8a8a8a');
+      tile.appendChild(h('div', { 'class': 'why', text: (x.days === 0 ? 'Today' : x.days === 1 ? 'Tomorrow' : 'In ' + x.days + ' days') + ' · ' + (x.t.occasion ? (OCCL[x.t.occasion] || x.t.occasion) : TAGL[x.t.kind]) }));
+      tile.appendChild(h('div', { 'class': 'prod' }, lnk(wineTitle(x.r), function () { openInfoSheet(x.r); }, 'Open the bottle info for ' + wineTitle(x.r))));
+      tile.appendChild(h('div', { 'class': 'sm', text: [x.t.who, x.t.note].filter(Boolean).join(' · ') }));
+      host.appendChild(tile);
+    });
+  }
+  function tagBlock(r) {
+    var box = h('div', { 'class': 'occ' }), form = h('div', { 'class': 'form2' }), msg = h('div', { 'class': 'err' });
+    function paint() {
+      box.replaceChildren();
+      var list = tagMap[r.id] || [];
+      if (!list.length) box.appendChild(h('span', { 'class': 'note', text: 'No tags yet. Mark it as a gift you received or gave, or keep it for a special occasion.' }));
+      list.forEach(function (t) {
+        box.appendChild(h('div', { 'class': 'row' }, h('span', { text: tagText(t) }),
+          h('button', { type: 'button', 'class': 'lnk', text: 'Remove', 'aria-label': 'Remove tag ' + tagText(t), onclick: function () { api('DELETE', 'api/tags/' + t.id).then(loadTags).then(function () { paint(); render(); }).catch(function (e) { msg.textContent = e.message; }); } })));
+      });
+    }
+    var kind = h('select', { 'class': 'in', 'aria-label': 'Tag' }, Object.keys(TAGL).map(function (k) { return h('option', { value: k, text: TAGL[k] }); }));
+    var occ = h('select', { 'class': 'in', 'aria-label': 'Occasion' }, h('option', { value: '', text: 'Occasion (optional)' }), Object.keys(OCCL).map(function (k) { return h('option', { value: k, text: OCCL[k] }); }));
+    var who = h('input', { 'class': 'in', placeholder: 'Who (optional)', 'aria-label': 'Who', maxlength: 80 });
+    var date = h('input', { 'class': 'in', type: 'date', 'aria-label': 'Date' });
+    var yearly = h('input', { type: 'checkbox', id: 'tagYearly' });
+    var note = h('input', { 'class': 'in wide', placeholder: 'Note (optional)', 'aria-label': 'Note', maxlength: 300 });
+    var add = h('button', { type: 'button', 'class': 'btn wide', text: 'Add tag', onclick: function () {
+      msg.textContent = ''; add.disabled = true;
+      api('POST', 'api/wines/' + r.id + '/tags', { kind: kind.value, occasion: occ.value, who: who.value, date: date.value, yearly: yearly.checked && !!date.value, note: note.value })
+        .then(loadTags).then(function () { who.value = ''; date.value = ''; note.value = ''; yearly.checked = false; paint(); render(); })
+        .catch(function (e) { msg.textContent = e.message; }).then(function () { add.disabled = false; });
+    } });
+    form.appendChild(kind); form.appendChild(occ); form.appendChild(who); form.appendChild(date);
+    form.appendChild(h('label', { 'class': 'wide note' }, yearly, ' Remind me every year (birthdays, anniversaries)'));
+    form.appendChild(note); form.appendChild(add);
+    paint();
+    return h('div', { 'class': 'f' }, h('div', { 'class': 'lab', text: 'Tags and occasions' }), box, form, msg);
+  }
+
+  /* ---------- scores and reviews ---------- */
+  function reviewBlock(r) {
+    var box = h('div', { 'class': 'f' }), msg = h('div', { 'class': 'err' });
+    function paint(d) {
+      box.replaceChildren();
+      var sm = d.summary, bits = [];
+      if (sm.critic.avg100 != null) bits.push('Critics ' + Math.round(sm.critic.avg100) + '/100 (' + sm.critic.count + ')');
+      if (sm.community.avg100 != null) bits.push('Community ' + Math.round(sm.community.avg100) + '/100 (' + sm.community.count + ')');
+      if (sm.like.percent != null && sm.like.votes >= 3) bits.push('CellarTracker members: ' + pct0(sm.like.percent) + ' like it (' + fmtN(sm.like.votes) + ')');
+      box.appendChild(h('div', { 'class': 'note', text: bits.length ? bits.join(' · ') : 'No scores yet.' }));
+      d.reviews.forEach(function (v) {
+        box.appendChild(h('div', { 'class': 'rv' },
+          h('div', { 'class': 'row', style: 'display:flex;gap:8px;align-items:baseline;flex-wrap:wrap' },
+            v.score != null ? h('span', { 'class': 'score', text: v.score + '/' + v.scale }) : null,
+            h('b', { text: v.source }), h('span', { 'class': 'note', text: (v.kind === 'critic' ? 'Critic' : 'Community') + (v.date ? ' · ' + v.date : '') }),
+            h('button', { type: 'button', 'class': 'lnk', text: 'Remove', 'aria-label': 'Remove review from ' + v.source, onclick: function () { api('DELETE', 'api/reviews/' + v.id).then(load).catch(function (e) { msg.textContent = e.message; }); } })),
+          v.text ? h('div', { text: v.text }) : null,
+          v.url ? h('a', { 'class': 'note', href: v.url, target: '_blank', rel: 'noopener noreferrer', text: 'Read the full review' }) : null));
+      });
+      var kind = h('select', { 'class': 'in', 'aria-label': 'Type of review' }, h('option', { value: 'critic', text: 'Critic or publication' }), h('option', { value: 'community', text: 'Community or friends' }));
+      var source = h('input', { 'class': 'in', placeholder: 'Source, e.g. Wine Advocate', 'aria-label': 'Source', maxlength: 80 });
+      var score = h('input', { 'class': 'in', inputmode: 'decimal', placeholder: 'Score', 'aria-label': 'Score' });
+      var scale = h('select', { 'class': 'in', 'aria-label': 'Scale' }, [100, 20, 10, 5].map(function (n) { return h('option', { value: n, text: 'out of ' + n }); }));
+      var date = h('input', { 'class': 'in', type: 'date', 'aria-label': 'Review date' });
+      var url = h('input', { 'class': 'in', placeholder: 'Link (optional)', 'aria-label': 'Link', maxlength: 300 });
+      var text = h('textarea', { 'class': 'in wide', placeholder: 'What they said (optional)', 'aria-label': 'Review text', maxlength: 2000 });
+      var add = h('button', { type: 'button', 'class': 'btn wide', text: 'Add review', onclick: function () {
+        msg.textContent = ''; add.disabled = true;
+        api('POST', 'api/wines/' + r.id + '/reviews', { kind: kind.value, source: source.value, score: score.value, scale: +scale.value, date: date.value, url: url.value, text: text.value })
+          .then(load).catch(function (e) { msg.textContent = e.message; add.disabled = false; });
+      } });
+      box.appendChild(h('div', { 'class': 'form2' }, kind, source, score, scale, date, url, text, add));
+      var links = h('div', { 'class': 'pick' });
+      if (sm.cellartrackerUrl) links.appendChild(h('a', { 'class': 'btn', href: sm.cellartrackerUrl, target: '_blank', rel: 'noopener noreferrer', text: 'Community and critic reviews on CellarTracker' }));
+      else links.appendChild(h('a', { 'class': 'btn', href: 'https://www.cellartracker.com/list.asp?Table=List&szSearch=' + encodeURIComponent((r.producer + ' ' + (r.name || '') + ' ' + (r.vint === 'NV' ? '' : r.vint)).trim()), target: '_blank', rel: 'noopener noreferrer', text: 'Search CellarTracker for reviews' }));
+      box.appendChild(links);
+      box.appendChild(h('p', { 'class': 'note', text: 'CellarTracker and the critics do not offer their scores for other apps to read, so this list is yours: copy over the scores you care about and they are kept with the wine.' }));
+    }
+    function load() { return api('GET', 'api/wines/' + r.id + '/reviews').then(paint).catch(function () { box.replaceChildren(h('span', { 'class': 'note', text: 'Scores and reviews are only available in the installed add-on.' })); }); }
+    load();
+    return h('div', { 'class': 'f' }, h('div', { 'class': 'lab', text: 'Scores and reviews' }), box, msg);
+  }
+
+  /* ---------- cellar climate ---------- */
+  var climate = null;
+  function loadClimate() { return api('GET', 'api/climate').then(function (c) { climate = c; drawClimate(); }).catch(function () {}); }
+  function drawClimate() {
+    var box = $('climate'); box.replaceChildren();
+    if (!climate || !climate.configured) { box.hidden = true; return; }
+    box.hidden = false;
+    [['temp', '🌡️', 'Temperature'], ['humidity', '💧', 'Humidity']].forEach(function (k) {
+      var x = climate[k[0]]; if (!x) return;
+      var val = x.value == null ? (x.status === 'offline' ? 'no connection' : 'no reading') : (Math.round(x.value * 10) / 10) + ' ' + x.unit;
+      var lim = climate.limits[k[0]];
+      box.appendChild(h('button', { type: 'button', 'class': 'cl ' + x.status, title: 'Wanted ' + lim[0] + ' to ' + lim[1] + (x.unit ? ' ' + x.unit : ''), onclick: openClimateSheet },
+        h('span', { text: k[1] }), h('span', { text: k[2] }), h('b', { text: val }), x.status === 'low' ? h('small', { text: 'too low' }) : x.status === 'high' ? h('small', { text: 'too high' }) : null));
+    });
+  }
+  function spark(series, lo, hi) {
+    var ns = 'http://www.w3.org/2000/svg', W = 300, H = 60, svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H); svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', 'Last 24 hours'); svg.style.cssText = 'width:100%;height:60px';
+    if (series.length < 2) return svg;
+    var mn = Math.min.apply(null, series.concat([lo])), mx = Math.max.apply(null, series.concat([hi])), sp = (mx - mn) || 1;
+    var y = function (v) { return H - 4 - (v - mn) / sp * (H - 8); };
+    var band = document.createElementNS(ns, 'rect'); band.setAttribute('x', 0); band.setAttribute('width', W); band.setAttribute('y', y(hi)); band.setAttribute('height', Math.max(1, y(lo) - y(hi))); band.setAttribute('fill', 'rgba(52,199,89,.18)'); svg.appendChild(band);
+    var pl = document.createElementNS(ns, 'polyline'); pl.setAttribute('fill', 'none'); pl.setAttribute('stroke', '#0a84ff'); pl.setAttribute('stroke-width', 2);
+    pl.setAttribute('points', series.map(function (v, i) { return (i / (series.length - 1) * W).toFixed(1) + ',' + y(v).toFixed(1); }).join(' ')); svg.appendChild(pl);
+    return svg;
+  }
+  function openClimateSheet() {
+    if (!climate || !climate.configured) return;
+    var body = h('div', { 'class': 'f', style: 'gap:16px' });
+    [['temp', 'Temperature'], ['humidity', 'Humidity']].forEach(function (k) {
+      var x = climate[k[0]]; if (!x) return; var lim = climate.limits[k[0]];
+      body.appendChild(h('div', { 'class': 'f' }, h('div', { 'class': 'lab', text: x.name || k[1] }),
+        h('div', {}, h('b', { text: x.value == null ? 'No reading' : x.value + ' ' + x.unit }), h('span', { 'class': 'note', text: x.status === 'low' ? '  Too low' : x.status === 'high' ? '  Too high' : x.status === 'ok' ? '  In range' : '' })),
+        h('div', { 'class': 'note', text: 'Wanted: ' + lim[0] + ' to ' + lim[1] + ' ' + x.unit + (x.min24 != null ? ' · last 24 hours: ' + x.min24 + ' to ' + x.max24 : '') }),
+        spark(x.series || [], lim[0], lim[1]), h('div', { 'class': 'note', text: x.entity })));
+    });
+    body.appendChild(h('p', { 'class': 'note', text: 'Read from Home Assistant. Change the sensors and the wanted ranges in the add-on Configuration tab. The green band is the wanted range.' }));
+    openSheet('Cellar climate', body, [h('button', { type: 'button', 'class': 'btn', text: 'Refresh', onclick: function () { loadClimate().then(openClimateSheet); } })]);
+  }
+
+  /* ---------- bottle labels (Code 128) ---------- */
+  var C128 = '212222 222122 222221 121223 121322 131222 122213 122312 132212 221213 221312 231212 112232 122132 122231 113222 123122 123221 223211 221132 221231 213212 223112 312131 311222 321122 321221 312212 322112 322211 212123 212321 232121 111323 131123 131321 112313 132113 132311 211313 231113 231311 112133 112331 132131 113123 113321 133121 313121 211331 231131 213113 213311 213131 311123 311321 331121 312113 312311 332111 314111 221411 431111 111224 111422 121124 121421 141122 141221 112214 112412 122114 122411 142112 142211 241211 221114 413111 241112 134111 111242 121142 121241 114212 124112 124211 411212 421112 421211 212141 214121 412121 111143 111341 131141 114113 114311 411113 411311 113141 114131 311141 411131 211412 211214 211232 2331112'.split(' ');
+  function code128(text) {
+    var vals = [104], sum = 104;
+    for (var i = 0; i < text.length; i++) { var c = text.charCodeAt(i) - 32; if (c < 0 || c > 95) throw new Error('Unsupported character'); vals.push(c); sum += c * (i + 1); }
+    vals.push(sum % 103); vals.push(106);
+    var bits = '';
+    vals.forEach(function (v) { C128[v].split('').forEach(function (d, i) { bits += (i % 2 === 0 ? '1' : '0').repeat(+d); }); });
+    return bits;
+  }
+  window.__wc = { code128: code128 };
+  function barcodeSvg(text) {
+    var ns = 'http://www.w3.org/2000/svg', bits = code128(text), q = 10, W = bits.length + 2 * q, svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', '0 0 ' + W + ' 10'); svg.setAttribute('preserveAspectRatio', 'none'); svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', 'Barcode ' + text);
+    var i = 0;
+    while (i < bits.length) {
+      if (bits[i] === '1') { var j = i; while (j < bits.length && bits[j] === '1') j++; var r = document.createElementNS(ns, 'rect'); r.setAttribute('x', q + i); r.setAttribute('y', 0); r.setAttribute('width', j - i); r.setAttribute('height', 10); r.setAttribute('fill', '#000'); svg.appendChild(r); i = j; } else i++;
+    }
+    return svg;
+  }
+  function wineCode(r) { return 'WC' + r.id; }
+  function openLabelSheet(list) {
+    var scope = list ? 'one' : 'filtered', per = 'bottle', grid = h('div', { 'class': 'lbls' }), info = h('div', { 'class': 'note nolabelprint' });
+    function chosen() { return list || (scope === 'all' ? stock() : sub(stock())).filter(function (r) { return r.qty > 0; }); }
+    function draw() {
+      grid.replaceChildren(); var n = 0, wines = chosen();
+      wines.forEach(function (r) {
+        var copies = per === 'bottle' ? Math.max(1, r.qty) : 1;
+        for (var i = 0; i < copies && n < 400; i++, n++) {
+          grid.appendChild(h('div', { 'class': 'lbl' }, barcodeSvg(wineCode(r)), h('div', { text: wineCode(r) }), h('b', { text: (r.vint === 'NV' ? 'NV' : r.vint) + ' ' + r.producer }), h('div', { text: r.name || '' })));
+        }
+      });
+      info.textContent = n + ' label' + (n === 1 ? '' : 's') + (n >= 400 ? ' (limited to 400 at a time, narrow the selection)' : '') + '. Print on sticker sheets, 3 across.';
+    }
+    var bs = [], bs2 = [], opts = h('div', { 'class': 'f nolabelprint', style: 'gap:8px' });
+    if (!list) opts.appendChild(h('div', { 'class': 'seg', role: 'group', 'aria-label': 'Which wines' }, [['filtered', 'Current filters'], ['all', 'Whole cellar']].map(function (p, i, a) { var b = h('button', { type: 'button', 'aria-pressed': scope === p[0] ? 'true' : 'false', text: p[1], onclick: function () { scope = p[0]; a.forEach(function (_, k) { bs[k].setAttribute('aria-pressed', a[k][0] === scope ? 'true' : 'false'); }); draw(); } }); bs[i] = b; return b; })));
+    opts.appendChild(h('div', { 'class': 'seg', role: 'group', 'aria-label': 'How many' }, [['bottle', 'One per bottle'], ['wine', 'One per wine']].map(function (p, i, a) { var b = h('button', { type: 'button', 'aria-pressed': per === p[0] ? 'true' : 'false', text: p[1], onclick: function () { per = p[0]; a.forEach(function (_, k) { bs2[k].setAttribute('aria-pressed', a[k][0] === per ? 'true' : 'false'); }); draw(); } }); bs2[i] = b; return b; })));
+    draw();
+    var printBtn = h('button', { type: 'button', 'class': 'btn primary', text: 'Print labels', onclick: function () {
+      document.body.classList.add('printlabels');
+      var done = function () { document.body.classList.remove('printlabels'); window.removeEventListener('afterprint', done); };
+      window.addEventListener('afterprint', done); setTimeout(function () { window.print(); }, 50);
+    } });
+    openSheet('Bottle labels', h('div', { 'class': 'f', style: 'gap:12px' },
+      h('p', { 'class': 'note nolabelprint', text: 'Stick one on each bottle. Scan it with Scan in this app (USB scanner, or the camera on a phone) and the wine opens, ready to open one.' }), opts, info, grid), [printBtn]);
   }
   function openDeleteSheet(r) {
     var err = h('div', { 'class': 'err' });
@@ -1070,15 +1365,17 @@ details.more .charts{margin-top:12px}
     var photoBtn = h('button', { type: 'button', 'class': 'btn', text: 'Take or choose a photo', onclick: function () { fileIn.click(); } });
     var photoErr = h('div', { 'class': 'err' });
     var ocrBox = h('div', { 'class': 'f' }), readBtn = h('button', { type: 'button', 'class': 'btn', text: 'Read the label', hidden: true, onclick: function () { if (photoBlob) readLabel(photoBlob); } });
-    fileIn.addEventListener('change', function () {
-      var f = fileIn.files[0]; fileIn.value = ''; if (!f) return;
+    function takeFile(f) {
       photoErr.textContent = '';
       shrink(f, 1600).then(function (b) { photoBlob = b; showPrev(URL.createObjectURL(b)); if (foundChk) { foundChk.checked = false; useFound = false; } ocrAvailable().then(function (ok) { readBtn.hidden = !ok; if (ok && adding && !ex) readLabel(b); }); })
         .catch(function (e) { photoErr.textContent = e.message; });
-    });
-    var photoBox = h('div', { 'class': 'f' }, h('div', { 'class': 'lab', text: 'Picture' }), prev, photoBtn, readBtn,
+    }
+    fileIn.addEventListener('change', function () { var f = fileIn.files[0]; fileIn.value = ''; if (f) takeFile(f); });
+    var photoBox = h('div', { 'class': 'f' }, h('div', { 'class': 'lab', text: 'Picture' }), prev, photoBtn, pasteButton(takeFile, photoErr), readBtn,
       foundChk ? h('label', { 'class': 'note', 'for': 'f_found', style: 'display:flex;gap:8px;align-items:center' }, foundChk, 'Use the picture found online') : null,
+      h('p', { 'class': 'note', text: 'You can also paste an image (Ctrl/⌘+V) or drop an image file here.' }),
       !cur && !foundChk ? h('p', { 'class': 'note', text: 'Without a photo the app looks for a picture online.' }) : null, fileIn, photoErr);
+    allowDrop(photoBox, takeFile);
 
     var err = h('div', { 'class': 'err' });
     var intro = null;
@@ -1200,6 +1497,7 @@ details.more .charts{margin-top:12px}
       }).catch(function (e) { err.textContent = e.message; save.disabled = false; });
     } });
     openSheet(edit ? 'Edit wine' : (ex ? 'Add bottles' : (pre.ean ? 'Add scanned bottle' : 'Add a wine')), body, [h('button', { type: 'button', 'class': 'btn', text: 'Cancel', onclick: function () { dlg.close(); } }), save]);
+    pasteTarget = takeFile;
   }
 
   /* ---------- pictures ---------- */
@@ -1213,6 +1511,46 @@ details.more .charts{margin-top:12px}
     } else b.innerHTML = BOTTLE;
     b.style.setProperty('--c', COLOR_HEX[r.color] || '#8a8a8a');
     return b;
+  }
+  /* paste and drop an image: Ctrl/Cmd+V, a Paste button, or drag a file onto the dialog */
+  function imageIn(dt) {
+    if (!dt) return null;
+    var i, files = dt.files || [], items = dt.items || [];
+    for (i = 0; i < files.length; i++) if (/^image\//.test(files[i].type)) return files[i];
+    for (i = 0; i < items.length; i++) if (items[i].kind === 'file' && /^image\//.test(items[i].type)) return items[i].getAsFile();
+    return null;
+  }
+  document.addEventListener('paste', function (e) {
+    if (!pasteTarget) return;
+    var f = imageIn(e.clipboardData); if (!f) return; /* plain text pastes still go to the field */
+    e.preventDefault(); pasteTarget(f);
+  });
+  dlg.addEventListener('close', function () { pasteTarget = null; });
+  function allowDrop(el, onFile) {
+    el.addEventListener('dragover', function (e) {
+      var t = e.dataTransfer && e.dataTransfer.types ? Array.prototype.slice.call(e.dataTransfer.types) : [];
+      if (t.indexOf('Files') >= 0) { e.preventDefault(); el.classList.add('dropping'); }
+    });
+    el.addEventListener('dragleave', function () { el.classList.remove('dropping'); });
+    el.addEventListener('drop', function (e) {
+      el.classList.remove('dropping');
+      var f = imageIn(e.dataTransfer); if (!f) return;
+      e.preventDefault(); onFile(f);
+    });
+  }
+  function pasteButton(onFile, msg) {
+    var hint = 'Copy an image first, then press Ctrl+V (⌘+V on a Mac) in this window.';
+    return h('button', { type: 'button', 'class': 'btn', text: 'Paste image', title: 'Paste an image you have copied (Ctrl/⌘+V works too)', onclick: function () {
+      msg.textContent = '';
+      if (!navigator.clipboard || !navigator.clipboard.read) { msg.textContent = hint; return; }
+      navigator.clipboard.read().then(function (items) {
+        for (var i = 0; i < items.length; i++) {
+          var type = Array.prototype.filter.call(items[i].types, function (t) { return /^image\//.test(t); })[0];
+          if (type) { items[i].getType(type).then(function (b) { onFile(new File([b], 'pasted-image', { type: b.type })); }); return; }
+        }
+        msg.textContent = 'There is no image on the clipboard. ' + hint;
+      }).catch(function () { msg.textContent = hint; });
+    } });
   }
   function shrink(file, max) {
     return new Promise(function (resolve, reject) {
@@ -1244,13 +1582,16 @@ details.more .charts{margin-top:12px}
     }
     var take = h('button', { type: 'button', 'class': 'btn primary', text: 'Take or choose a photo', onclick: function () { file.click(); } });
     var find = h('button', { type: 'button', 'class': 'btn', text: 'Find a picture online', onclick: function () { busy(find, 'Searching…', function () { return api('POST', 'api/wines/' + r.id + '/image/search'); }); } });
-    file.addEventListener('change', function () {
-      var f = file.files[0]; file.value = ''; if (!f) return;
+    function saveFile(f) {
       busy(take, 'Saving…', function () { return shrink(f, 1000).then(function (b) { return api('PUT', 'api/wines/' + r.id + '/image', null, b, 'image/jpeg'); }); });
-    });
+    }
+    file.addEventListener('change', function () { var f = file.files[0]; file.value = ''; if (f) saveFile(f); });
     var rm = r.img ? h('button', { type: 'button', 'class': 'btn danger', text: 'Remove picture', onclick: function () { busy(rm, 'Removing…', function () { return api('DELETE', 'api/wines/' + r.id + '/image'); }); } }) : null;
-    body.appendChild(h('div', { 'class': 'pick' }, take, find, rm)); body.appendChild(file); body.appendChild(msg);
+    body.appendChild(h('div', { 'class': 'pick' }, take, pasteButton(saveFile, msg), find, rm)); body.appendChild(file);
+    body.appendChild(h('p', { 'class': 'note', text: 'You can also paste an image (Ctrl/⌘+V) or drop an image file on this window.' })); body.appendChild(msg);
+    allowDrop(body, saveFile);
     openSheet(wineTitle(r), body);
+    pasteTarget = saveFile;
   }
 
   /* ---------- barcode scan ---------- */
@@ -1260,10 +1601,16 @@ details.more .charts{margin-top:12px}
   function rowOf(w) { return rows.find(function (x) { return x.id === w.id; }) || norm(w); }
   function openScanSheet() {
     var err = h('div', { 'class': 'err' }), camHost = h('div');
-    var input = h('input', { 'class': 'in', inputmode: 'numeric', autocomplete: 'off', placeholder: 'Scan, or type the number under the barcode', 'aria-label': 'Barcode number', maxlength: 20 });
+    var input = h('input', { 'class': 'in', autocomplete: 'off', placeholder: 'Scan, or type the number under the barcode', 'aria-label': 'Barcode number', maxlength: 20 });
     var go = h('button', { type: 'button', 'class': 'btn primary', text: 'Look up', onclick: function () { lookup(); } });
     function lookup(code) {
-      var ean = String(typeof code === 'string' ? code : input.value).replace(/\D/g, '');
+      var raw = String(typeof code === 'string' ? code : input.value).trim(), mine = /^WC(\d+)$/i.exec(raw);
+      if (mine) {
+        var own = rows.find(function (x) { return x.id === +mine[1]; });
+        if (!own) { err.textContent = 'This label belongs to a wine that is no longer in the cellar.'; return; }
+        stopCam(); return openInfoSheet(own);
+      }
+      var ean = raw.replace(/\D/g, '');
       if (!ean) { err.textContent = 'Enter the number under the barcode.'; return; }
       err.textContent = ''; go.disabled = true; go.textContent = 'Looking…';
       api('GET', 'api/ean/' + ean).then(function (res) { stopCam(); scanResult(res); })
@@ -1272,7 +1619,7 @@ details.more .charts{margin-top:12px}
     input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); lookup(); } });
     var canCam = window.isSecureContext && ('BarcodeDetector' in window) && navigator.mediaDevices && navigator.mediaDevices.getUserMedia;
     var camBtn = canCam ? h('button', { type: 'button', 'class': 'btn', text: 'Use the camera', onclick: function () {
-      var det; try { det = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e'] }); } catch (e) { err.textContent = 'Barcode reading is not available in this browser.'; return; }
+      var det; try { det = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128'] }); } catch (e) { err.textContent = 'Barcode reading is not available in this browser.'; return; }
       navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }).then(function (stream) {
         var v = h('video', { 'class': 'cam', playsinline: true, muted: true, autoplay: true }); v.srcObject = stream; camHost.replaceChildren(v);
         var alive = true; scanStop = function () { alive = false; stream.getTracks().forEach(function (t) { t.stop(); }); };
@@ -1394,6 +1741,8 @@ details.more .charts{margin-top:12px}
   /* Racks screen is built and tested but switched off for now: remove the hidden attribute on #racksBtn to bring it back. */
   $('racksBtn').addEventListener('click', function () { openRacks(); });
   $('statsBtn').addEventListener('click', openStats);
+  $('labelBtn').addEventListener('click', function () { openLabelSheet(); });
+  $('pairBtn').addEventListener('click', function () { openPairSheet(); });
   $('tableBtn').addEventListener('click', openTable);
   $('chartsBox').addEventListener('toggle', render);
   var layout = $('layout');
@@ -2083,7 +2432,7 @@ details.more .charts{margin-top:12px}
 
   /* ---------- start ---------- */
   function load() {
-    return api('GET', 'api/config').then(function (c) { cfg = c; }).catch(function () {}).then(function () { return api('GET', 'api/wines'); }).then(function (d) { rows = d.wines.map(norm); return loadCheckins(); }).then(loadRacks).then(render);
+    return api('GET', 'api/config').then(function (c) { cfg = c; }).catch(function () {}).then(function () { return api('GET', 'api/wines'); }).then(function (d) { rows = d.wines.map(norm); return loadCheckins(); }).then(loadRacks).then(loadTags).then(render).then(loadClimate).then(function () { setInterval(loadClimate, 300000); });
   }
   fetch(base + 'api/health').then(function (r) { return r.ok ? r.json() : Promise.reject(); }).then(function (j) { if (!j || !j.ok) throw 0; })
     .catch(function () { demoMode = true; demoApi = makeDemo(); var d = $('demo'); d.style.display = 'block'; d.textContent = 'Preview with sample wines. Changes here are not saved. Install the add-on to use your own cellar.'; })
