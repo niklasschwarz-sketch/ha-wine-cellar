@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.0
+- No database to set up: a new install keeps your cellar in its own file inside the add-on, which Home Assistant backups include. Install, start, open.
+- Postgres is now optional (`db_type: postgres`), for example for Grafana. An existing install that has a database password keeps using Postgres when it updates.
+- The add-on is stopped briefly during Home Assistant backups so the data file is copied cleanly
+- The setup guide is rewritten around the simple install, with Postgres as an optional section
+- Test script `test_api.py` added to the repository
 ## 0.6.1
 - Setup guide rewritten for a fresh Home Assistant: installing Postgres 17, creating the database and login with two SQL lines, installing and configuring this add-on, and what to do if it does not start
 - The add-on now stops with a clear message in the log when `db_password` is empty

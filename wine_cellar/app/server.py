@@ -164,7 +164,10 @@ class DB:
     def _connect(self):
         if DB_TYPE == "sqlite":
             import sqlite3
-            c = sqlite3.connect(os.environ.get("SQLITE_PATH", ":memory:"), check_same_thread=False)
+            path = os.environ.get("SQLITE_PATH", ":memory:")
+            if path != ":memory:":
+                os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+            c = sqlite3.connect(path, check_same_thread=False, timeout=15)
             return c
         import pg8000.dbapi as pg
         return pg.connect(

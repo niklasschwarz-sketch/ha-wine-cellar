@@ -1,8 +1,18 @@
 # Wine Cellar
 
-Wine Cellar stores everything in a Postgres database. It needs a Postgres server that Home Assistant can reach, and its own empty database and login on that server. Set this up once, in this order.
+## Install
+1. Add this repository: Settings → Add-ons → Add-on store → ⋮ → Repositories → `https://github.com/niklasschwarz-sketch/ha-wine-cellar`. Home Assistant can only read public repositories. For a private one, copy the `wine_cellar` folder into the `/local_apps` folder of your Home Assistant instead.
+2. Install **Wine Cellar**. The first install builds the add-on on your own Home Assistant and downloads about 20 MB (the label reader), so it takes a few minutes.
+3. Start it and turn on **Show in sidebar**. Open **Cellar**.
+4. Tap **Add wine**, or **Import / export** and choose your CellarTracker CSV export (safe to repeat; matches on iWine).
 
-## Set up on a fresh Home Assistant
+That is all. There is nothing to configure: the add-on keeps your cellar in its own database file, so it needs no database server and touches nothing else on your system.
+
+## Where your data is, and backups
+Your cellar is one file inside the add-on (`/data/winecellar.db`). Home Assistant backups include it automatically. During a backup the add-on is stopped for a moment so the file is copied cleanly. You can also download a CSV (opens in Excel and Sheets) or a full JSON copy from **Import / export** at any time.
+
+## Using Postgres instead (optional)
+Use this only if you want your data in Postgres, for example to chart it in Grafana. You need a Postgres server that Home Assistant can reach and an empty database and login of its own on it. Set this up once, in this order.
 
 ### 1. Install a Postgres add-on
 Use **Postgres 17** from Alex Belgium's add-on repository (the setup below is written for it).
@@ -27,22 +37,21 @@ CREATE DATABASE winecellar OWNER winecellar;
 
 The add-on creates its own tables (they start with `wc_`) the first time it runs. It never touches other databases.
 
-### 3. Install and configure Wine Cellar
-1. Add this repository the same way as step 1: `https://github.com/niklasschwarz-sketch/ha-wine-cellar`. Home Assistant can only read public repositories. For a private one, copy the `wine_cellar` folder into the `/local_apps` folder of your Home Assistant instead.
-2. Install **Wine Cellar**. The first install builds the add-on on your own Home Assistant and downloads about 20 MB (the label reader), so it takes a few minutes.
-3. In its Configuration tab set `db_password` to the `CHOOSE_A_PASSWORD` from step 2. The other options (`db_host` `db21ed7f-postgres-latest`, `db_port` 5432, `db_name` `winecellar`, `db_user` `winecellar`) already match the steps above, so only change them if you chose different names or use another Postgres. Save.
-4. Start the add-on and turn on **Show in sidebar**. Open **Cellar** in the sidebar.
-5. Tap **Import / export** and choose your CellarTracker CSV export (safe to repeat; matches on iWine). Or just tap **Add wine**.
+### 3. Point Wine Cellar at it
+1. In the Wine Cellar Configuration tab set `db_type` to `postgres` and `db_password` to the `CHOOSE_A_PASSWORD` from step 2. The other options (`db_host` `db21ed7f-postgres-latest`, `db_port` 5432, `db_name` `winecellar`, `db_user` `winecellar`) already match the steps above, so only change them if you chose different names or use another Postgres. Save.
+2. Restart the add-on. The log says "Starting Wine Cellar with Postgres".
 
 ### If it does not start
 Open the add-on's **Log** tab. Database problems show up as "Database not ready" lines followed by the reason, and after about a minute "Could not reach the database".
-- "db_password is empty": fill in `db_password` in the Configuration tab and start again.
+- "db_type is postgres but db_password is empty": fill in `db_password` in the Configuration tab and start again.
 - "password authentication failed": the password does not match the one from step 2. Either correct `db_password`, or reset it with `ALTER USER winecellar WITH PASSWORD 'new';` in `psql`.
 - "database ... does not exist" or "Could not reach the database": check step 2 was done, and that `db_host`, `db_name` and `db_user` match what you created and Postgres is started.
 
 Tip: by default the Postgres add-on can also be reached from other devices on your network on port 5432. If only add-ons need it, clear the port under the Postgres add-on's Network settings and restart it.
 
 Tables are prefixed `wc_`. Drinking a bottle logs a check-in with optional rating.
+
+If `db_type` is not set, an add-on that already has a `db_password` keeps using Postgres, so updating from an older version never switches you to an empty cellar. A new install with no password uses the built-in database. Data is not copied between the two: to move, export a CSV and import it on the other side (wines and bottle counts move; history, pictures and rack positions do not).
 
 ## Adding wines
 When you type a producer that is already in your cellar, the form fills in country, region, grape, colour and style, and suggests a drinking window from your earlier vintages (it is only a suggestion; change it freely).
@@ -70,9 +79,9 @@ Tick rows to add or remove a bottle on all of them, duplicate them, or delete th
 **Stats** shows bottles, value or money paid by region, country, vintage, style, grape and producer, when to drink, price bands, biggest gains and losses, and bottles opened per month. It can cover the whole cellar or only your current filters.
 
 ## Export and import
-**Import / export** downloads a CSV (opens in Excel, Numbers, Google Sheets) or a full JSON copy with history and rack positions. The CSV uses CellarTracker's column names, so it can be imported again, here or in CellarTracker. Importing again updates wines and adds new ones; it deletes nothing and does not restore rack positions. For a complete backup, include the Postgres app in your Home Assistant backups.
+**Import / export** downloads a CSV (opens in Excel, Numbers, Google Sheets) or a full JSON copy with history and rack positions. The CSV uses CellarTracker's column names, so it can be imported again, here or in CellarTracker. Importing again updates wines and adds new ones; it deletes nothing and does not restore rack positions. For a complete backup, include this add-on in your Home Assistant backups (or the Postgres add-on, if you use Postgres).
 
-## Grafana
-The add-on creates read-only views in the database for charts: `wc_v_cellar`, `wc_v_by_region`, `wc_v_by_vintage`, `wc_v_by_type`, `wc_v_drunk_by_month` and `wc_v_rack_contents`.
+## Grafana (Postgres only)
+Grafana needs the Postgres option above. The add-on creates read-only views in the database for charts: `wc_v_cellar`, `wc_v_by_region`, `wc_v_by_vintage`, `wc_v_by_type`, `wc_v_drunk_by_month` and `wc_v_rack_contents`.
 1. In Grafana add a PostgreSQL data source pointing at the Postgres app (host `db21ed7f-postgres-latest`, port 5432), database `winecellar` and the `winecellar` login.
 2. Import `grafana/wine-cellar-dashboard.json` from this folder and pick that data source.
