@@ -1,10 +1,46 @@
 # Wine Cellar
 
-1. In the Postgres add-on configuration create a database and login (you choose the password):
-   `databases: [winecellar]`, `logins: [{username: winecellar, password: <yours>}]`, `rights: [{username: winecellar, database: winecellar}]`. Restart Postgres.
-2. Enter the same values in this add-on's Configuration tab.
-3. Start the add-on, enable "Show in sidebar", open **Cellar**.
-4. Tap **Import / export** and choose your CellarTracker CSV export (safe to repeat; matches on iWine).
+Wine Cellar stores everything in a Postgres database. It needs a Postgres server that Home Assistant can reach, and its own empty database and login on that server. Set this up once, in this order.
+
+## Set up on a fresh Home Assistant
+
+### 1. Install a Postgres add-on
+Use **Postgres 17** from Alex Belgium's add-on repository (the setup below is written for it).
+1. Settings → Add-ons → Add-on store → ⋮ → Repositories, add `https://github.com/alexbelgium/hassio-addons`.
+2. Install **Postgres 17**. In its Configuration tab set `POSTGRES_PASSWORD` (this is the password of the `postgres` administrator, keep it safe) and press Save.
+3. Start it and check the log for errors. Its address for other add-ons is `db21ed7f-postgres-latest`, port `5432`. That name is the same on every Home Assistant that installed it from this repository.
+
+Already running another Postgres (for example one shared with other add-ons)? You can use it. Just use its host name below, and the same two commands in step 2.
+
+### 2. Create the database and login for Wine Cellar
+You do this once, with a SQL command line. The **Terminal & SSH** add-on has one:
+1. Install and start **Terminal & SSH** (official add-ons).
+2. In its terminal run `apk add postgresql17-client`.
+3. Run `psql -h db21ed7f-postgres-latest -U postgres` and enter the `POSTGRES_PASSWORD` from step 1.
+4. At the `postgres=#` prompt run these two lines. Replace `CHOOSE_A_PASSWORD` with a new password only for Wine Cellar (not your admin password), and keep the quotes:
+
+```
+CREATE USER winecellar WITH PASSWORD 'CHOOSE_A_PASSWORD';
+CREATE DATABASE winecellar OWNER winecellar;
+```
+5. Type `exit`.
+
+The add-on creates its own tables (they start with `wc_`) the first time it runs. It never touches other databases.
+
+### 3. Install and configure Wine Cellar
+1. Add this repository the same way as step 1: `https://github.com/niklasschwarz-sketch/ha-wine-cellar`. Home Assistant can only read public repositories. For a private one, copy the `wine_cellar` folder into the `/local_apps` folder of your Home Assistant instead.
+2. Install **Wine Cellar**. The first install builds the add-on on your own Home Assistant and downloads about 20 MB (the label reader), so it takes a few minutes.
+3. In its Configuration tab set `db_password` to the `CHOOSE_A_PASSWORD` from step 2. The other options (`db_host` `db21ed7f-postgres-latest`, `db_port` 5432, `db_name` `winecellar`, `db_user` `winecellar`) already match the steps above, so only change them if you chose different names or use another Postgres. Save.
+4. Start the add-on and turn on **Show in sidebar**. Open **Cellar** in the sidebar.
+5. Tap **Import / export** and choose your CellarTracker CSV export (safe to repeat; matches on iWine). Or just tap **Add wine**.
+
+### If it does not start
+Open the add-on's **Log** tab. Database problems show up as "Database not ready" lines followed by the reason, and after about a minute "Could not reach the database".
+- "db_password is empty": fill in `db_password` in the Configuration tab and start again.
+- "password authentication failed": the password does not match the one from step 2. Either correct `db_password`, or reset it with `ALTER USER winecellar WITH PASSWORD 'new';` in `psql`.
+- "database ... does not exist" or "Could not reach the database": check step 2 was done, and that `db_host`, `db_name` and `db_user` match what you created and Postgres is started.
+
+Tip: by default the Postgres add-on can also be reached from other devices on your network on port 5432. If only add-ons need it, clear the port under the Postgres add-on's Network settings and restart it.
 
 Tables are prefixed `wc_`. Drinking a bottle logs a check-in with optional rating.
 

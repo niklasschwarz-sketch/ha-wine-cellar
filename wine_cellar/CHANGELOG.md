@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.1
+- Setup guide rewritten for a fresh Home Assistant: installing Postgres 17, creating the database and login with two SQL lines, installing and configuring this add-on, and what to do if it does not start
+- The add-on now stops with a clear message in the log when `db_password` is empty
+
 ## 0.6.0
 - New wine-cellar look: dark cellar colours, serif headings, a brass accent, and a "drinking window" bar on every card
 - Wines come first: a slim summary strip, then drink-soon, then the list; the header has Add wine, Scan and a More menu

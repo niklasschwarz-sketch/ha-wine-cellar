@@ -1,5 +1,5 @@
 name: Wine Cellar
-version: "0.6.0"
+version: "0.6.1"
 slug: wine_cellar
 description: Your wine cellar in Home Assistant. Bottles, racks with drag and drop, barcode scanning, pictures, wine list, stats and export, stored in Postgres.
 url: https://github.com/niklasschwarz-sketch/ha-wine-cellar
