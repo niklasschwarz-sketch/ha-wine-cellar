@@ -25,7 +25,44 @@ PORT = int(os.environ.get("TEST_PORT", "18781"))
 BASE = "http://127.0.0.1:%d" % PORT
 TMP = tempfile.mkdtemp(prefix="winecellar-test-")
 DB = os.path.join(TMP, "sub", "winecellar.db")  # the sub folder must be created by the server
-ENV = dict(os.environ, DB_TYPE="sqlite", SQLITE_PATH=DB, PORT=str(PORT), AUTO_IMAGES="0", AUTO_PRICES="0")
+MOCK_PORT = PORT + 1
+ENV = dict(os.environ, DB_TYPE="sqlite", SQLITE_PATH=DB, PORT=str(PORT), AUTO_IMAGES="0", AUTO_PRICES="0",
+           HA_API="http://127.0.0.1:%d/api" % MOCK_PORT, SUPERVISOR_TOKEN="test-token",
+           CLIMATE_TEMP_ENTITY="sensor.cellar_temp", CLIMATE_HUMIDITY_ENTITY="sensor.cellar_humidity", HUMIDITY_MIN="60", HUMIDITY_MAX="75")
+
+# A tiny stand-in for the Home Assistant API: two sensors, one fine and one too dry.
+import http.server
+import threading
+SEEN_AUTH = []
+
+
+class MockHA(http.server.BaseHTTPRequestHandler):
+    def log_message(self, *a):
+        pass
+
+    def do_GET(self):
+        SEEN_AUTH.append(self.headers.get("Authorization"))
+        if self.path.startswith("/api/states/sensor.cellar_temp"):
+            body = {"state": "13.5", "attributes": {"unit_of_measurement": "\u00b0C", "friendly_name": "Cellar temp"}}
+        elif self.path.startswith("/api/states/sensor.cellar_humidity"):
+            body = {"state": "48", "attributes": {"unit_of_measurement": "%", "friendly_name": "Cellar humidity"}}
+        elif self.path.startswith("/api/history/period/"):
+            vals = ["12.0", "13.5", "14.2"] if "cellar_temp" in self.path else ["50", "48", "unknown"]
+            body = [[{"state": v} for v in vals]]
+        else:
+            self.send_response(404)
+            self.end_headers()
+            return
+        data = json.dumps(body).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+
+mock = http.server.ThreadingHTTPServer(("127.0.0.1", MOCK_PORT), MockHA)
+threading.Thread(target=mock.serve_forever, daemon=True).start()
 
 fails = []
 proc = None
@@ -195,6 +232,61 @@ try:
     for i in (cab, chab, sau, rie):
         call("DELETE", "/api/wines/%d" % i)
 
+    # ---- tags
+    tw = mk(producer="Tag Estate", wine="Gift", color="Red")
+    s, t = call("POST", "/api/wines/%d/tags" % tw, {"kind": "gift_received", "occasion": "birthday", "who": "Anna", "date": "2024-05-17", "yearly": True, "note": "50th"})
+    check("add a gift tag with birthday", s == 201 and t["kind"] == "gift_received" and t["occasion"] == "birthday" and t["yearly"] is True and t["who"] == "Anna", t)
+    s, t2 = call("POST", "/api/wines/%d/tags" % tw, {"kind": "special", "occasion": "anniversary"})
+    check("special occasion tag without a date", s == 201 and t2["date"] == "" and t2["yearly"] is False, t2)
+    s, e = call("POST", "/api/wines/%d/tags" % tw, {"kind": "nonsense"})
+    check("unknown tag kind refused", s == 400, e)
+    s, e = call("POST", "/api/wines/%d/tags" % tw, {"kind": "special", "date": "2024-13-45"})
+    check("bad date refused", s == 400, e)
+    s, e = call("POST", "/api/wines/%d/tags" % tw, {"kind": "special", "occasion": "picnic"})
+    check("unknown occasion refused", s == 400, e)
+    s, l = call("GET", "/api/wines/%d/tags" % tw)
+    check("tags listed for a wine", s == 200 and len(l["tags"]) == 2, l)
+    s, l = call("GET", "/api/tags")
+    check("all tags listed", len(l["tags"]) >= 2)
+    s, d = call("DELETE", "/api/tags/%d" % t2["id"])
+    check("delete a tag", s == 200 and len(call("GET", "/api/wines/%d/tags" % tw)[1]["tags"]) == 1)
+    check("tag on unknown wine is 404", call("POST", "/api/wines/99999/tags", {"kind": "special"})[0] == 404)
+
+    # ---- reviews and scores
+    s, rv = call("POST", "/api/wines/%d/reviews" % tw, {"kind": "critic", "source": "Wine Advocate", "score": 94, "scale": 100, "text": "Dense and long", "date": "2023-02-01", "url": "https://example.com/x"})
+    check("add a critic review", s == 201 and rv["score100"] == 94, rv)
+    s, rv2 = call("POST", "/api/wines/%d/reviews" % tw, {"kind": "critic", "source": "Decanter", "score": 18, "scale": 20})
+    check("a 20-point score is converted to 100", s == 201 and rv2["score100"] == 90, rv2)
+    s, rv3 = call("POST", "/api/wines/%d/reviews" % tw, {"kind": "community", "source": "Friends", "score": 4, "scale": 5, "text": "Loved it"})
+    check("community review", s == 201 and rv3["score100"] == 80, rv3)
+    s, e = call("POST", "/api/wines/%d/reviews" % tw, {"kind": "critic", "source": "X", "score": 120, "scale": 100})
+    check("score above the scale refused", s == 400, e)
+    s, e = call("POST", "/api/wines/%d/reviews" % tw, {"kind": "critic", "source": "", "score": 90})
+    check("source is required", s == 400, e)
+    s, e = call("POST", "/api/wines/%d/reviews" % tw, {"kind": "critic", "source": "X"})
+    check("score or text required", s == 400, e)
+    s, e = call("POST", "/api/wines/%d/reviews" % tw, {"kind": "critic", "source": "X", "score": 90, "url": "javascript:alert(1)"})
+    check("only http links accepted", s == 400, e)
+    s, l = call("GET", "/api/wines/%d/reviews" % tw)
+    check("summary averages the critics", s == 200 and l["summary"]["critic"] == {"count": 2, "avg100": 92.0} and l["summary"]["community"]["count"] == 1, l["summary"])
+    check("no CellarTracker link for a wine without an iWine number", l["summary"]["cellartrackerUrl"] == "")
+    s, d = call("DELETE", "/api/reviews/%d" % rv3["id"])
+    check("delete a review", s == 200 and len(call("GET", "/api/wines/%d/reviews" % tw)[1]["reviews"]) == 2)
+    with urllib.request.urlopen(BASE + "/api/backup.json", timeout=10) as r:
+        bk = json.loads(r.read().decode())
+    check("backup carries tags and reviews", len(bk["tags"]) == 1 and len(bk["reviews"]) == 2, (len(bk["tags"]), len(bk["reviews"])))
+    call("DELETE", "/api/wines/%d" % tw)
+    s, l = call("GET", "/api/tags")
+    check("deleting a wine removes its tags", all(x["wineId"] != tw for x in l["tags"]))
+
+    # ---- cellar climate from Home Assistant
+    s, c = call("GET", "/api/climate")
+    check("climate configured", s == 200 and c["configured"] is True, c)
+    check("temperature is read and in range", c["temp"]["value"] == 13.5 and c["temp"]["status"] == "ok" and c["temp"]["unit"] == "\u00b0C", c["temp"])
+    check("humidity too dry is flagged", c["humidity"]["value"] == 48 and c["humidity"]["status"] == "low", c["humidity"])
+    check("24 hour range and series come from history", c["temp"]["min24"] == 12.0 and c["temp"]["max24"] == 14.2 and len(c["temp"]["series"]) == 3 and c["humidity"]["max24"] == 50, c["temp"])
+    check("add-on sends its token to Home Assistant", set(SEEN_AUTH) == {"Bearer test-token"}, set(SEEN_AUTH))
+
     # ---- page and unknown paths
     with urllib.request.urlopen(BASE + "/", timeout=5) as r:
         html = r.read().decode()
@@ -202,6 +294,7 @@ try:
     check("unknown api path is 404", call("GET", "/api/nope")[0] == 404)
 finally:
     stop()
+    mock.shutdown()
 
 print()
 if fails:

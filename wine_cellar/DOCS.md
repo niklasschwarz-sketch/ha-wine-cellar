@@ -74,6 +74,18 @@ Once a week the add-on downloads the public mirror of Systembolaget's assortment
 ## Food and wine pairing
 Open a bottle: **Goes well with** lists the dishes that suit it best (score 80 and up is excellent, 68 and up good). **More → Dinner pairing** works the other way round: search or pick a dish and see your best bottles for it, with drink-soon bottles lifted a little. The suggestions come from rules built into the add-on (grape, region, weight, acidity, tannin, sweetness, age and classic matches), so they work offline and are a guide, not a promise. Sauces and spices change a dish, and a wine with no grape or region filled in is judged on colour and style only.
 
+## Cellar climate (temperature and humidity)
+Set the sensors in the Configuration tab: `climate_temp_entity` and `climate_humidity_entity` (the entity ids from Home Assistant, such as `sensor.cellar_temperature`). `temp_min`/`temp_max` (default 10 to 16) and `humidity_min`/`humidity_max` (default 60 to 75) are the ranges you want. The page shows the readings and marks them orange when outside the range; tap one to see the last 24 hours. The add-on only reads those two sensors, through Home Assistant's own connection, and needs no password. Leave the fields empty to hide the strip. To be notified when the cellar drifts, make a normal Home Assistant automation on the same sensors.
+
+## Tags and occasions
+On a bottle's page, **Tags and occasions** lets you mark it as a gift you received, a gift you gave, or one kept for a special occasion. Add an occasion (birthday, anniversary, wedding and so on), a person, a date and a note. Tick **Remind me every year** for birthdays and anniversaries: they show under **Coming up** for 45 days before. The Filters list has a **Tags** group once you have used a tag.
+
+## Bottle labels
+**More → Bottle labels** shows a sheet of barcode labels (Code 128, text such as `WC12`) for your current selection or the whole cellar, one per bottle or one per wine, and **Print labels** opens the print dialog (3 labels across; use sticker paper). A single wine's page has **Print label**. Choose **Scan** and read a label with a USB or Bluetooth scanner (click the box first), or type the code, or use the camera if your browser can read barcodes: the wine's page opens, with **Open one** ready. Labels keep working after backups and restores because they carry the wine's number in this cellar. If you import the same cellar into a fresh install the numbers can change, so reprint then.
+
+## Scores and reviews
+Each wine page has **Scores and reviews**: add a critic or community score (out of 100, 20, 10 or 5) with the source, date, a few words and a link. The average of your critic scores is shown at the top, with the CellarTracker "members like it" share from your import. CellarTracker, Vivino and the critics do not let other apps read their scores, so you enter the ones you care about; the **CellarTracker** button opens the wine's page there for the community and critic notes.
+
 ## Edit table
 **Edit table** opens the whole cellar as a spreadsheet. Type in any cell, or use the + and − next to the bottle count. Enter and the up/down arrows move between rows, Tab moves right and adds a row after the last cell. You can paste rows straight from Excel or Google Sheets (column order: vintage, producer, wine, colour, style, country, region, appellation, grape, bottles, paid, value, drink from, drink to, shelf). Ctrl/Cmd+D copies the cell above.
 Tick rows to add or remove a bottle on all of them, duplicate them, or delete them. Changed cells are highlighted. Nothing is saved until you press Save (or Ctrl/Cmd+S); Discard throws the changes away. Bottle changes show up in the activity list as added or removed.

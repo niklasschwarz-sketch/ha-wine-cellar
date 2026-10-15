@@ -1,7 +1,7 @@
 # HA Wine Cellar
 Home Assistant add-on: a filterable wine cellar app (add / drink / remove bottles, check-ins, drink-soon, charts) built-in database (Postgres optional).
 
-Features: barcode scanning, label photo reading, pictures (paste or drop images), food and wine pairing, printable wine list, printable wine list, edit table, stats, CSV export/import, Grafana views. Racks with drag and drop are built but switched off (see `docs/`).
+Features: barcode scanning, label photo reading, pictures (paste or drop images), food and wine pairing, cellar temperature and humidity from Home Assistant, gift and occasion tags, printable bottle barcode labels, scores and reviews, printable wine list, printable wine list, edit table, stats, CSV export/import, Grafana views. Racks with drag and drop are built but switched off (see `docs/`).
 
 ## Install
 1. Add this repository (`https://github.com/niklasschwarz-sketch/ha-wine-cellar`) in Settings → Add-ons → Add-on store → ⋮ → Repositories.

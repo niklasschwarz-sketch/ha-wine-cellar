@@ -1,5 +1,5 @@
 name: Wine Cellar
-version: "0.8.0"
+version: "0.9.0"
 slug: wine_cellar
 description: Your wine cellar in Home Assistant. Bottles, barcode scanning, label photos, pictures, wine list, stats and export. Works out of the box, no database to set up.
 url: https://github.com/niklasschwarz-sketch/ha-wine-cellar
@@ -8,6 +8,7 @@ init: false
 startup: application
 boot: auto
 backup: cold
+homeassistant_api: true
 ingress: true
 ingress_port: 8099
 panel_icon: mdi:glass-wine
@@ -21,6 +22,12 @@ options:
   auto_images: true
   systembolaget_prices: false
   eur_sek_rate: 11.0
+  climate_temp_entity: ""
+  climate_humidity_entity: ""
+  temp_min: 10
+  temp_max: 16
+  humidity_min: 60
+  humidity_max: 75
 schema:
   db_type: list(sqlite|postgres)?
   db_host: str?
@@ -31,3 +38,9 @@ schema:
   auto_images: bool?
   systembolaget_prices: bool?
   eur_sek_rate: float?
+  climate_temp_entity: str?
+  climate_humidity_entity: str?
+  temp_min: float?
+  temp_max: float?
+  humidity_min: float?
+  humidity_max: float?

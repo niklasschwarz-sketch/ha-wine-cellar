@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.0
+- **Cellar climate:** the add-on reads your temperature and humidity sensors from Home Assistant and shows them at the top of the page, marked orange when outside the range you want. Tap one for the last 24 hours. Set `climate_temp_entity` and `climate_humidity_entity` (for example `sensor.cellar_temperature`) and the wanted ranges in the Configuration tab. Nothing is shown until you set a sensor.
+- **Tags and occasions:** mark a bottle as a gift you received, a gift you gave, or kept for a special occasion, with an optional occasion (birthday, anniversary, wedding, Christmas, graduation, dinner), person, date and note. Dates can repeat every year; birthdays and anniversaries in the next 45 days appear under **Coming up**. You can also filter the cellar by tag.
+- **Bottle labels:** **More → Bottle labels** prints Code 128 barcode labels, one per bottle or one per wine. **Scan** reads them (USB scanner, typing, or the phone camera where the browser supports it) and opens the wine. Each wine page also has **Print label**.
+- **Scores and reviews:** each wine keeps your own list of critic and community scores and reviews (any scale: 100, 20, 10 or 5 points), with a summary average, plus a link to the wine's CellarTracker page. The CellarTracker "members like it" share from your import is shown there too. CellarTracker and the critics do not offer their scores to other apps, so these are entered by hand.
+- Tags and reviews are part of the JSON backup
+
 ## 0.8.0
 - Food and wine pairing: every bottle's page has a **Goes well with** list (best dishes, with a score and the reason), worked out on your own system from grape, region, colour, sweetness, age and style. Nothing is sent over the internet.
 - **More → Dinner pairing**: pick or search a dish (about 40, with Swedish words such as lamm, torsk, ost) and see which bottles in your cellar suit it best. Bottles that should be drunk soon rank a little higher, bottles not ready yet a little lower.

@@ -30,4 +30,7 @@ fi
 if bashio::config.false 'auto_images'; then export AUTO_IMAGES=0; else export AUTO_IMAGES=1; fi
 if bashio::config.false 'systembolaget_prices'; then export AUTO_PRICES=0; else export AUTO_PRICES=1; fi
 if bashio::config.has_value 'eur_sek_rate'; then export EUR_SEK="$(bashio::config 'eur_sek_rate')"; fi
+for pair in "climate_temp_entity:CLIMATE_TEMP_ENTITY" "climate_humidity_entity:CLIMATE_HUMIDITY_ENTITY" "temp_min:TEMP_MIN" "temp_max:TEMP_MAX" "humidity_min:HUMIDITY_MIN" "humidity_max:HUMIDITY_MAX"; do
+  if bashio::config.has_value "${pair%%:*}"; then export "${pair##*:}=$(bashio::config "${pair%%:*}")"; fi
+done
 exec python3 /app/server.py

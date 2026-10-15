@@ -42,6 +42,25 @@ SB_MAX = 120 * 1024 * 1024
 EUR_SEK = float(os.environ.get("EUR_SEK", "11") or 11)
 USER_AGENT = "WineCellarHomeAssistant/0.2 (personal home cellar; local add-on)"
 
+HA_API = os.environ.get("HA_API", "http://supervisor/core/api").rstrip("/")
+HA_TOKEN = os.environ.get("SUPERVISOR_TOKEN", "")
+CLIMATE_TEMP = os.environ.get("CLIMATE_TEMP_ENTITY", "").strip()
+CLIMATE_HUM = os.environ.get("CLIMATE_HUMIDITY_ENTITY", "").strip()
+
+
+def _envf(name, default):
+    try:
+        return float(os.environ.get(name, "") or default)
+    except ValueError:
+        return default
+
+
+TEMP_MIN, TEMP_MAX = _envf("TEMP_MIN", 10), _envf("TEMP_MAX", 16)
+HUM_MIN, HUM_MAX = _envf("HUMIDITY_MIN", 60), _envf("HUMIDITY_MAX", 75)
+TAG_KINDS = ("gift_received", "gift_given", "special")
+OCCASIONS = ("birthday", "anniversary", "wedding", "christmas", "graduation", "dinner", "other")
+REVIEW_KINDS = ("critic", "community")
+
 COLORS = ("Red", "White", "Rosé")
 STYLES = ("Dry", "Off-dry", "Sparkling", "Sweet")
 
@@ -146,6 +165,31 @@ SCHEMA = [
     )""",
     "CREATE UNIQUE INDEX IF NOT EXISTS wc_bottles_pos ON wc_bottles (rack_id, shelf, slot)",
     "CREATE INDEX IF NOT EXISTS wc_bottles_wine ON wc_bottles (wine_id)",
+    """CREATE TABLE IF NOT EXISTS wc_tags (
+        id BIGSERIAL PRIMARY KEY,
+        wine_id BIGINT NOT NULL,
+        kind TEXT NOT NULL,
+        occasion TEXT,
+        who TEXT,
+        date TEXT,
+        yearly INTEGER NOT NULL DEFAULT 0,
+        note TEXT,
+        created_at TS_TYPE
+    )""",
+    "CREATE INDEX IF NOT EXISTS wc_tags_wine ON wc_tags (wine_id)",
+    """CREATE TABLE IF NOT EXISTS wc_reviews (
+        id BIGSERIAL PRIMARY KEY,
+        wine_id BIGINT NOT NULL,
+        kind TEXT NOT NULL,
+        source TEXT,
+        score DOUBLE PRECISION,
+        scale INTEGER,
+        text TEXT,
+        url TEXT,
+        date TEXT,
+        created_at TS_TYPE
+    )""",
+    "CREATE INDEX IF NOT EXISTS wc_reviews_wine ON wc_reviews (wine_id)",
     """CREATE TABLE IF NOT EXISTS wc_meta (
         k TEXT PRIMARY KEY,
         v TEXT
@@ -535,6 +579,8 @@ def delete_wine(wid):
     db.run("DELETE FROM wc_images WHERE wine_id = ?", (wid,))
     db.run("DELETE FROM wc_prices WHERE wine_id = ?", (wid,))
     db.run("DELETE FROM wc_bottles WHERE wine_id = ?", (wid,))
+    db.run("DELETE FROM wc_tags WHERE wine_id = ?", (wid,))
+    db.run("DELETE FROM wc_reviews WHERE wine_id = ?", (wid,))
     db.run("DELETE FROM wc_wines WHERE id = ?", (wid,))
     return {"deleted": wid}
 
@@ -812,12 +858,177 @@ def export_csv():
     return ("﻿" + out.getvalue()).encode("utf-8")
 
 
+# ---------------------------------------------------------------- tags
+def tag_json(r):
+    return {"id": r["id"], "wineId": r["wine_id"], "kind": r["kind"], "occasion": r.get("occasion") or "", "who": r.get("who") or "",
+            "date": r.get("date") or "", "yearly": bool(r.get("yearly")), "note": r.get("note") or ""}
+
+
+def clean_date(v):
+    v = txt(v, 10)
+    if not v:
+        return ""
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", v):
+        raise ApiError(400, "Date must look like 2026-12-24")
+    try:
+        datetime.strptime(v, "%Y-%m-%d")
+    except ValueError:
+        raise ApiError(400, "That date does not exist")
+    return v
+
+
+def add_tag(wid, data):
+    get_wine(wid)
+    kind = txt(data.get("kind"), 20)
+    if kind not in TAG_KINDS:
+        raise ApiError(400, "Kind must be one of: " + ", ".join(TAG_KINDS))
+    occ = txt(data.get("occasion"), 20).lower()
+    if occ and occ not in OCCASIONS:
+        raise ApiError(400, "Occasion must be one of: " + ", ".join(OCCASIONS))
+    date = clean_date(data.get("date"))
+    yearly = 1 if (data.get("yearly") and date) else 0
+    r = db.run(
+        "INSERT INTO wc_tags (wine_id, kind, occasion, who, date, yearly, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+        (wid, kind, occ, txt(data.get("who"), 80), date, yearly, txt(data.get("note"), 300), now()), fetch="one")
+    return tag_json(db.run("SELECT * FROM wc_tags WHERE id = ?", (r["id"],), fetch="one"))
+
+
+def list_tags(wid=None):
+    if wid is None:
+        rows = db.run("SELECT * FROM wc_tags ORDER BY id", fetch="all")
+    else:
+        rows = db.run("SELECT * FROM wc_tags WHERE wine_id = ? ORDER BY id", (wid,), fetch="all")
+    return [tag_json(r) for r in rows]
+
+
+def delete_tag(tid):
+    if not db.run("SELECT id FROM wc_tags WHERE id = ?", (tid,), fetch="one"):
+        raise ApiError(404, "Tag not found")
+    db.run("DELETE FROM wc_tags WHERE id = ?", (tid,))
+    return {"deleted": tid}
+
+
+# ---------------------------------------------------------------- reviews
+def review_json(r):
+    sc, scale = r.get("score"), r.get("scale") or 100
+    return {"id": r["id"], "wineId": r["wine_id"], "kind": r["kind"], "source": r.get("source") or "", "score": sc, "scale": scale,
+            "score100": None if sc is None else round(sc * 100.0 / scale, 1), "text": r.get("text") or "", "url": r.get("url") or "", "date": r.get("date") or ""}
+
+
+def add_review(wid, data):
+    get_wine(wid)
+    kind = txt(data.get("kind"), 20)
+    if kind not in REVIEW_KINDS:
+        raise ApiError(400, "Kind must be critic or community")
+    source = txt(data.get("source"), 80)
+    if not source:
+        raise ApiError(400, "Say where the review is from (for example Wine Advocate)")
+    scale = int(num(data.get("scale"), 100) or 100)
+    if scale not in (5, 10, 20, 100):
+        raise ApiError(400, "Scale must be 5, 10, 20 or 100")
+    raw = data.get("score")
+    score = None
+    if raw not in (None, ""):
+        score = num(raw, None)
+        if score is None or score < 0 or score > scale:
+            raise ApiError(400, "Score must be between 0 and %d" % scale)
+    text = txt(data.get("text"), 2000)
+    if score is None and not text:
+        raise ApiError(400, "Add a score or a few words")
+    url = txt(data.get("url"), 300)
+    if url and not re.match(r"^https?://", url, re.I):
+        raise ApiError(400, "The link must start with http:// or https://")
+    r = db.run(
+        "INSERT INTO wc_reviews (wine_id, kind, source, score, scale, text, url, date, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+        (wid, kind, source, score, scale, text, url, clean_date(data.get("date")), now()), fetch="one")
+    return review_json(db.run("SELECT * FROM wc_reviews WHERE id = ?", (r["id"],), fetch="one"))
+
+
+def list_reviews(wid):
+    get_wine(wid)
+    rows = db.run("SELECT * FROM wc_reviews WHERE wine_id = ? ORDER BY id DESC", (wid,), fetch="all")
+    out = [review_json(r) for r in rows]
+    w = get_wine(wid)
+    summ = {}
+    for kind in REVIEW_KINDS:
+        sc = [x["score100"] for x in out if x["kind"] == kind and x["score100"] is not None]
+        summ[kind] = {"count": len([x for x in out if x["kind"] == kind]), "avg100": round(sum(sc) / len(sc), 1) if sc else None}
+    summ["like"] = {"percent": w.get("like_percent"), "votes": w.get("like_votes")}
+    iw = str(w.get("iwine") or "")
+    summ["cellartrackerUrl"] = "https://www.cellartracker.com/wine.asp?iWine=" + iw if iw.isdigit() else ""
+    return {"reviews": out, "summary": summ}
+
+
+def delete_review(rid):
+    if not db.run("SELECT id FROM wc_reviews WHERE id = ?", (rid,), fetch="one"):
+        raise ApiError(404, "Review not found")
+    db.run("DELETE FROM wc_reviews WHERE id = ?", (rid,))
+    return {"deleted": rid}
+
+
+# ---------------------------------------------------------------- cellar climate (from Home Assistant)
+_climate_cache = {"t": 0, "v": None}
+
+
+def _ha_get(path):
+    req = urllib.request.Request(HA_API + path, headers={"Authorization": "Bearer " + HA_TOKEN, "Content-Type": "application/json", "User-Agent": USER_AGENT})
+    with urllib.request.urlopen(req, timeout=8) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+
+def _reading(entity, lo, hi, start_iso):
+    out = {"entity": entity, "value": None, "unit": "", "status": "unavailable", "min24": None, "max24": None, "series": []}
+    try:
+        st = _ha_get("/states/" + quote(entity, safe="._"))
+        out["unit"] = (st.get("attributes") or {}).get("unit_of_measurement", "")
+        out["name"] = (st.get("attributes") or {}).get("friendly_name", entity)
+        v = float(st.get("state"))
+        out["value"] = v
+        out["status"] = "low" if v < lo else ("high" if v > hi else "ok")
+    except (ValueError, TypeError, KeyError):
+        pass
+    except (urllib.error.URLError, OSError):
+        out["status"] = "offline"
+        return out
+    try:
+        hist = _ha_get("/history/period/%s?filter_entity_id=%s&minimal_response&no_attributes" % (quote(start_iso, safe=""), quote(entity, safe="._")))
+        pts = []
+        for p in (hist[0] if hist else []):
+            try:
+                pts.append(float(p.get("state")))
+            except (ValueError, TypeError):
+                continue
+        if pts:
+            out["min24"], out["max24"] = min(pts), max(pts)
+            step = max(1, len(pts) // 48)
+            out["series"] = [round(x, 1) for x in pts[::step]]
+    except Exception:
+        pass
+    return out
+
+
+def climate():
+    if not (CLIMATE_TEMP or CLIMATE_HUM):
+        return {"configured": False}
+    if time.time() - _climate_cache["t"] < 60 and _climate_cache["v"]:
+        return _climate_cache["v"]
+    start = (datetime.now(timezone.utc) - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S+00:00")
+    res = {"configured": True, "limits": {"temp": [TEMP_MIN, TEMP_MAX], "humidity": [HUM_MIN, HUM_MAX]}, "temp": None, "humidity": None}
+    if CLIMATE_TEMP:
+        res["temp"] = _reading(CLIMATE_TEMP, TEMP_MIN, TEMP_MAX, start)
+    if CLIMATE_HUM:
+        res["humidity"] = _reading(CLIMATE_HUM, HUM_MIN, HUM_MAX, start)
+    _climate_cache.update(t=time.time(), v=res)
+    return res
+
+
 def export_json():
     wines = [wine_json(r) for r in db.run("SELECT * FROM wc_wines ORDER BY id", fetch="all")]
     checkins = db.run("SELECT * FROM wc_checkins ORDER BY id", fetch="all")
     for c in checkins:
         c["ts"] = iso(c.get("ts"))
-    doc = {"app": "wine-cellar", "exported": iso(now()), "wines": wines, "checkins": checkins, "racks": racks_state()}
+    doc = {"app": "wine-cellar", "exported": iso(now()), "wines": wines, "checkins": checkins, "racks": racks_state(),
+           "tags": list_tags(), "reviews": [review_json(r) for r in db.run("SELECT * FROM wc_reviews ORDER BY id", fetch="all")]}
     return json.dumps(doc, ensure_ascii=False, indent=1).encode("utf-8")
 
 
@@ -1395,12 +1606,31 @@ class Handler(BaseHTTPRequestHandler):
                 if not found:
                     raise ApiError(404, "No picture found online for this wine. You can add your own photo.")
                 return self._send(200, wine_json(get_wine(wid)))
+            if len(parts) == 3 and parts[2] == "tags":
+                if method == "GET":
+                    get_wine(wid)
+                    return self._send(200, {"tags": list_tags(wid)})
+                if method == "POST":
+                    return self._send(201, add_tag(wid, self._json()))
+            if len(parts) == 3 and parts[2] == "reviews":
+                if method == "GET":
+                    return self._send(200, list_reviews(wid))
+                if method == "POST":
+                    return self._send(201, add_review(wid, self._json()))
             if len(parts) == 3 and parts[2] == "pairing" and method == "GET":
                 return self._send(200, wine_pairing(wid))
             if len(parts) == 3 and parts[2] == "sb" and method == "POST":
                 return self._send(200, sb_check(wid))
         if len(parts) == 3 and parts[:2] == ["sb", "debug"] and parts[2].isdigit() and method == "GET":
             return self._send(200, sb_debug(int(parts[2])))
+        if parts == ["tags"] and method == "GET":
+            return self._send(200, {"tags": list_tags()})
+        if len(parts) == 2 and parts[0] == "tags" and parts[1].isdigit() and method == "DELETE":
+            return self._send(200, delete_tag(int(parts[1])))
+        if len(parts) == 2 and parts[0] == "reviews" and parts[1].isdigit() and method == "DELETE":
+            return self._send(200, delete_review(int(parts[1])))
+        if parts == ["climate"] and method == "GET":
+            return self._send(200, climate())
         if parts == ["pairing", "dishes"] and method == "GET":
             return self._send(200, {"dishes": pairing.search_dishes(q.get("q", [""])[0])})
         if parts == ["pairing", "find"] and method == "GET":
