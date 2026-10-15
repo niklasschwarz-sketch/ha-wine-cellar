@@ -11,6 +11,8 @@ No database setup is needed: the cellar is kept in a file inside the add-on and 
 
 Home Assistant can only add public repositories. While this repo is private, copy the `wine_cellar` folder into `/local_apps` on your Home Assistant instead.
 
+Coming from 0.6.x on Postgres? See [`docs/migrate-from-postgres.md`](docs/migrate-from-postgres.md) for a step by step move to the built-in database, including cleaning up Postgres and Grafana.
+
 ## Development
 `python3 test_api.py` starts the server on a temporary SQLite file and runs the API tests. No Postgres or network needed.
 
