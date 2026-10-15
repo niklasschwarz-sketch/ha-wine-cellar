@@ -30,9 +30,16 @@ trap 'rm -rf "$W"' EXIT
 CODE="$(curl -sSL -o "$W/src.tgz" -w '%{http_code}' ${TOKEN:+-H "Authorization: Bearer $TOKEN"} -H "Accept: application/vnd.github+json" "$URL" || true)"
 case "$CODE" in
   200|000) ;;   # 000 is what curl reports for a local file
-  401|403) rm -f "$TOKEN_FILE"; echo "GitHub refused the token (HTTP $CODE). It was forgotten; run the script again with a new token."; exit 1 ;;
-  404) echo "Repository or branch not found, or the token cannot see it (HTTP 404). Check the token's repository access."; exit 1 ;;
-  *) echo "Download failed (HTTP $CODE)."; exit 1 ;;
+  401|403|404)
+    rm -f "$TOKEN_FILE"
+    echo "GitHub said no (HTTP $CODE): $(head -c 300 "$W/src.tgz" | tr '\n' ' ')"
+    case "$CODE" in
+      401) echo "The token is wrong or expired. Make a new one and run the script again." ;;
+      403) echo "The token can be read but is not allowed to download this repository. Check: Resource owner is niklasschwarz-sketch, Repository access includes ha-wine-cellar, and Repository permissions > Contents is Read-only. Or you hit a rate limit; wait a few minutes." ;;
+      404) echo "GitHub cannot see the repository with this token. Check the token's repository access and that it has not expired." ;;
+    esac
+    echo "The saved token was forgotten. Run the script again with a corrected token."; exit 1 ;;
+  *) echo "Download failed (HTTP $CODE): $(head -c 300 "$W/src.tgz" | tr '\n' ' ')"; exit 1 ;;
 esac
 [ -s "$W/src.tgz" ] || { echo "Nothing was downloaded. Check that Home Assistant has internet access."; exit 1; }
 [ -n "$TOKEN" ] && [ -z "$WC_URL" ] && { umask 077; printf '%s' "$TOKEN" > "$TOKEN_FILE"; }
