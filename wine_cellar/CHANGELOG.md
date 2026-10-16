@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.13.2
+- **Clearer wine list:** each card now starts with the wine name, with the year small after it, then the producer. Tap the picture or the name to open the wine page.
+- **Open one** and **+1** moved to the wine page (bottom buttons), together with Edit and More… (change picture, print label, remove one, delete). The list cards are calmer without buttons.
+- **Move…** sits next to *Stored in* on the wine page.
+
 ## 0.13.1
 - **Move many bottles:** use the filters and search to show the wines you want (a colour, a region, a producer…), then tap **Move these…** next to the place chips (or *Storage places → Move many bottles…*). Choose where the bottles are now (no place, anywhere, or a named place) and where they go.
 

@@ -136,8 +136,8 @@ DROP = """async (sel) => {
 
 def open_info(page):
     page.fill("#q", "Pair Estate")
-    page.wait_for_function("() => document.querySelectorAll('p.wn button.lnk').length === 1")
-    page.locator("p.wn button.lnk").first.click()
+    page.wait_for_function("() => document.querySelectorAll('.wname > button.lnk').length === 1")
+    page.locator(".wname > button.lnk").first.click()
 
 
 proc = subprocess.Popen([sys.executable, "-I", SERVER], env=ENV, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -161,9 +161,12 @@ try:
         page.wait_for_selector("button.pic")
 
         # ---- the picture sheet of an existing wine: paste
-        card = page.locator("button.pic").filter(has=page.locator("svg")).first
         page.locator("button.pic").first.click()
         page.wait_for_selector("dialog[open] .sheet")
+        check("the picture opens the wine page", page.locator("dialog[open] .sf button:has-text('Open one')").count() == 1 and page.locator("dialog[open] .sf button:has-text('+1')").count() == 1)
+        page.click("dialog[open] .sf button:has-text('More…')")
+        page.click("dialog[open] button:has-text('picture…')")
+        page.wait_for_selector("dialog[open] button:has-text('Paste image')")
         check("sheet offers a Paste image button", page.locator("dialog[open] button", has_text="Paste image").count() == 1)
         check("plain text paste is left alone", page.evaluate(PASTE_TEXT) is False)
         prevented = page.evaluate(PASTE)
@@ -184,6 +187,9 @@ try:
             btn.click()
             page.wait_for_selector("dialog[open] .sheet")
             if ("Drop Test" in page.locator("dialog[open] .sh h2").inner_text()) == (other == w2):
+                page.click("dialog[open] .sf button:has-text('More…')")
+                page.click("dialog[open] button:has-text('picture…')")
+                page.wait_for_selector("dialog[open] button:has-text('Paste image')")
                 break
             page.keyboard.press("Escape")
         dropped = page.evaluate(DROP, "dialog[open] .sb .f")
@@ -414,7 +420,8 @@ try:
         page.click("#placeBar .chip:has-text('Fridge 1')")
         total = page.locator("article.wine").count()
         check("tapping a place shows only wines kept there", 1 <= total < len(api("GET", "/api/wines")["wines"]) and page.locator("article.wine", has_text=two["producer"]).count() >= 1, total)
-        page.locator("article.wine", has_text=two["producer"]).first.locator("button:has-text('Open one')").click()
+        page.locator("article.wine", has_text=two["producer"]).first.locator("button.pic").click()
+        page.click("dialog[open] .sf button:has-text('Open one')")
         page.wait_for_selector("dialog[open] .radio")
         check("opening a bottle that is in several places asks which one", page.locator("dialog[open] .radio").count() >= 2)
         page.locator("dialog[open] .radio", has_text="Cellar left").click()
