@@ -29,7 +29,7 @@ Home Assistant can only add public repositories. While this repo is private, cop
 **Feedback:** tell the developer what you tried, what you expected and what happened, and include the add-on's Log tab text if something failed. Please export a CSV from **Import / export** before an update, to be safe.
 
 ## Licences and credits
-Wine Cellar is released under the [MIT licence](LICENSE). See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for the open-source components, the data sources and the non-affiliation note.
+Wine Cellar is released under the [Apache License 2.0](LICENSE) (see also [`NOTICE`](NOTICE)). It is provided as is, without warranty, and the author is not liable for damages or data loss. Make a Home Assistant backup before installing or updating. See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for the open-source components, the data sources and the non-affiliation note.
 
 ## Development
 `python3 test_api.py` starts the server on a temporary SQLite file and runs the API tests. No Postgres or network needed. `python3 test_ui.py` drives the page in headless Chromium (needs `pip install playwright`).

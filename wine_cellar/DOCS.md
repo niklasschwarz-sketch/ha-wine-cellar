@@ -8,6 +8,9 @@
 
 That is all. There is nothing to configure: the add-on keeps your cellar in its own database file, so it needs no database server and touches nothing else on your system.
 
+## No warranty
+Wine Cellar is free software under the Apache License 2.0 and is provided "as is", without warranty of any kind. The author is not liable for any loss or damage, including lost data. Keep a Home Assistant backup and export a CSV from **Import / export** now and then. Prices, scores, pairings and drinking windows are suggestions, not advice. The barcode labels and scanner are a convenience and may misread.
+
 ## Privacy: what goes over the internet
 - **Pictures:** for each wine in stock the add-on asks Open Food Facts (a free, open database) for a picture, using the producer, wine name and barcode. Switch it off with the option `auto_images`.
 - **Systembolaget prices:** off by default. If you turn on `systembolaget_prices` it downloads a public price list once a week. Your own wines are never sent anywhere.
