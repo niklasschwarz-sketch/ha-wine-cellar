@@ -750,6 +750,7 @@ details.more .charts{margin-top:12px}
       box.appendChild(h('button', { type: 'button', 'class': 'chip', 'aria-pressed': state.place.has(p.name) ? 'true' : 'false', onclick: function () { toggle('place', p.name); } }, h('span', { text: p.name }), h('em', { text: fmtN(t.get(p.name) || 0) })));
     });
     if (t.has(NOPLACE) || state.place.has(NOPLACE)) box.appendChild(h('button', { type: 'button', 'class': 'chip', 'aria-pressed': state.place.has(NOPLACE) ? 'true' : 'false', onclick: function () { toggle('place', NOPLACE); } }, h('span', { text: NOPLACE }), h('em', { text: fmtN(t.get(NOPLACE) || 0) })));
+    box.appendChild(h('button', { type: 'button', 'class': 'btn sm', text: 'Move these…', title: 'Move the bottles of the wines shown to a place', onclick: function () { openBulkMove(); } }));
   }
   function drawBar() {
     var nf = sum(Object.keys(DIM_LABEL), function (k) { return state[k].size; }) + (state.q ? 1 : 0); $('filtN').textContent = nf ? String(nf) : '';
@@ -2067,6 +2068,7 @@ details.more .charts{margin-top:12px}
       });
       if (places.length) box.appendChild(card);
       box.appendChild(h('button', { type: 'button', 'class': 'btn primary', text: '+ Add a place', onclick: function () { openPlaceForm(null); } }));
+      if (places.length) box.appendChild(h('button', { type: 'button', 'class': 'btn', text: 'Move many bottles…', onclick: function () { openBulkMove(); } }));
     }
     function reorder(i, d) {
       var ids = places.map(function (p) { return p.id; }), j = i + d; if (j < 0 || j >= ids.length) return;
@@ -2076,6 +2078,36 @@ details.more .charts{margin-top:12px}
     openSheet('Storage places', h('div', { 'class': 'f', style: 'gap:14px' },
       h('p', { 'class': 'note', text: 'Each bottle sits in one place. A wine with several bottles can be spread over several places.' }), box, msg));
     loadPlaces().then(function () { paint(); });
+  }
+  /* move every bottle of the wines currently shown (use the filters and search to pick them) */
+  function openBulkMove() {
+    var shown = sub(stock()).filter(function (r) { return r.qty > 0; });
+    var src = h('select', { 'class': 'in', 'aria-label': 'Bottles that are now' }, [h('option', { value: 'unplaced', text: NOPLACE }), h('option', { value: 'any', text: 'Anywhere' })].concat(places.map(function (p) { return h('option', { value: String(p.id), text: 'In ' + p.name }); })));
+    var dst = h('select', { 'class': 'in', 'aria-label': 'Move them to' }, places.map(function (p) { return h('option', { value: String(p.id), text: p.name }); }).concat([h('option', { value: '', text: NOPLACE })]));
+    var last = lastPlace(); if (last) dst.value = String(last);
+    var info = h('p', { 'class': 'note' }), err = h('div', { 'class': 'err' });
+    function count() {
+      var v = src.value, n = 0, wn = 0, d = dst.value === '' ? null : +dst.value;
+      shown.forEach(function (r) {
+        var k = 0, un = unplacedOf(r);
+        if (v === 'unplaced') k = un; else if (v === 'any') k = r.qty - (d ? placeIn(r, d) : 0); else k = +v === d ? 0 : placeIn(r, +v);
+        if (k > 0) { n += k; wn++; }
+      });
+      return { n: n, w: wn };
+    }
+    function paint() { var c = count(); info.textContent = c.n ? fmtN(c.n) + (c.n === 1 ? ' bottle' : ' bottles') + ' of ' + fmtN(c.w) + (c.w === 1 ? ' wine' : ' wines') + ' will move.' : 'No bottles match. Change the choices above.'; go.disabled = !c.n; }
+    var go = h('button', { type: 'button', 'class': 'btn primary', text: 'Move', onclick: function () {
+      go.disabled = true; err.textContent = '';
+      var body = { wineIds: shown.map(function (r) { return r.id; }), from: src.value === 'unplaced' || src.value === 'any' ? src.value : +src.value, to: dst.value === '' ? null : +dst.value };
+      api('POST', 'api/places/move', body).then(function (res) { if (body.to) rememberPlace(body.to); return load().then(function () { toast('Moved ' + fmtN(res.moved) + (res.moved === 1 ? ' bottle' : ' bottles')); dlg.close(); }); })
+        .catch(function (e) { err.textContent = e.message; go.disabled = false; });
+    } });
+    src.addEventListener('change', paint); dst.addEventListener('change', paint); paint();
+    var nf = Object.keys(DIM_LABEL).some(function (k) { return state[k].size; }) || state.q;
+    openSheet('Move many bottles', h('div', { 'class': 'f', style: 'gap:14px' },
+      h('p', { text: nf ? 'This works on the wines you are looking at now (' + fmtN(shown.length) + (shown.length === 1 ? ' wine' : ' wines') + ', set by your filters and search).' : 'No filter is set, so this works on all ' + fmtN(shown.length) + ' wines. Close this and filter first (colour, region, producer, search…) to move only some.' }),
+      h('div', { 'class': 'f' }, h('div', { 'class': 'lab', text: 'Bottles that are now' }), src), h('div', { 'class': 'f' }, h('div', { 'class': 'lab', text: 'Move them to' }), dst), info, err),
+      [h('button', { type: 'button', 'class': 'btn', text: 'Cancel', onclick: function () { dlg.close(); } }), go]);
   }
   function openPlaceForm(p) {
     var name = h('input', { 'class': 'in', maxlength: 60, value: p ? p.name : '', placeholder: 'e.g. Fridge 1, Cellar left, Bar', 'aria-label': 'Place name' });

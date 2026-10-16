@@ -980,6 +980,52 @@ def move_stock(wid, data):
     return wine_json(get_wine(wid))
 
 
+def bulk_move(data):
+    """Move bottles for many wines at once (the wines currently shown). from: 'unplaced', 'any' or a place id."""
+    ids = data.get("wineIds")
+    if not isinstance(ids, list) or not ids or len(ids) > 5000:
+        raise ApiError(400, "Choose at least one wine")
+    src = data.get("from")
+    if src not in ("unplaced", "any"):
+        src = _place_arg(src, "From")
+        if src is None:
+            raise ApiError(400, "Choose where the bottles are now")
+    dst = _place_arg(data.get("to"), "To")
+    if dst is None and src == "unplaced":
+        raise ApiError(400, "Choose a place to move them to")
+    moved = wines_n = 0
+    with db.lock:
+        for raw in ids:
+            if not str(raw).isdigit():
+                continue
+            wid = int(raw)
+            w = db.run("SELECT quantity FROM wc_wines WHERE id = ?", (wid,), fetch="one")
+            if not w:
+                continue
+            stock = {x["place_id"]: x["qty"] for x in db.run("SELECT place_id, qty FROM wc_stock WHERE wine_id = ?", (wid,), fetch="all")}
+            free = (w["quantity"] or 0) - sum(stock.values())
+            take = {}   # place id -> bottles
+            n_free = 0
+            if src == "unplaced":
+                n_free = max(0, free)
+            elif src == "any":
+                take = {k: v for k, v in stock.items() if k != dst}
+                n_free = max(0, free)
+            else:
+                if src != dst and stock.get(src):
+                    take = {src: stock[src]}
+            n = sum(take.values()) + n_free
+            if not n:
+                continue
+            for pid, q in take.items():
+                _stock_take(wid, pid, q)
+            if dst is not None:
+                _stock_add(wid, dst, n)
+            moved += n
+            wines_n += 1
+    return {"moved": moved, "wines": wines_n}
+
+
 def set_stock_note(wid, pid, data):
     get_wine(wid)
     row = _stock_row(wid, pid)
@@ -2191,6 +2237,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, places_state())
             if method == "POST":
                 return self._send(201, create_place(self._json()))
+        if parts == ["places", "move"] and method == "POST":
+            return self._send(200, bulk_move(self._json()))
         if parts == ["places", "order"] and method == "PUT":
             return self._send(200, order_places(self._json()))
         if len(parts) == 2 and parts[0] == "places" and parts[1].isdigit():

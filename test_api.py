@@ -225,6 +225,27 @@ try:
     s, d = call("DELETE", "/api/wines/%d" % sp)
     check("the test wine is removed again", s == 200)
 
+    # ---- move many bottles at once
+    s, st = call("POST", "/api/places", {"name": "Bulk target"})
+    bt = [x for x in st["places"] if x["name"] == "Bulk target"][0]["id"]
+    s, ba = call("POST", "/api/wines", {"producer": "Bulk A", "wine": "A", "vintage": 2020, "color": "Red", "quantity": 4, "placeId": shelf2["id"]})
+    s, bb = call("POST", "/api/wines", {"producer": "Bulk B", "wine": "B", "vintage": 2020, "color": "Red", "quantity": 3})
+    s, e = call("POST", "/api/places/move", {"wineIds": [], "from": "unplaced", "to": bt})
+    check("bulk move needs wines", s == 400, e)
+    s, r = call("POST", "/api/places/move", {"wineIds": [ba["id"], bb["id"]], "from": "unplaced", "to": bt})
+    wa = [x for x in wines() if x["id"] == ba["id"]][0]
+    wb = [x for x in wines() if x["id"] == bb["id"]][0]
+    check("bottles without a place move to the chosen place", s == 200 and r["moved"] == 3 and r["wines"] == 1 and wb["stock"][0]["placeId"] == bt and [x["qty"] for x in wa["stock"]] == [4], (r, wa["stock"], wb["stock"]))
+    s, r = call("POST", "/api/places/move", {"wineIds": [ba["id"], bb["id"]], "from": "any", "to": bt})
+    wa = [x for x in wines() if x["id"] == ba["id"]][0]
+    check("moving from anywhere gathers every bottle in one place", s == 200 and r["moved"] == 4 and wa["stock"] == [{"placeId": bt, "qty": 4, "note": ""}], (r, wa["stock"]))
+    s, r = call("POST", "/api/places/move", {"wineIds": [ba["id"]], "from": bt, "to": shelf2["id"]})
+    wa = [x for x in wines() if x["id"] == ba["id"]][0]
+    check("moving from one named place to another", s == 200 and wa["stock"][0]["placeId"] == shelf2["id"] and wa["quantity"] == 4, wa["stock"])
+    for w_ in (ba, bb):
+        call("DELETE", "/api/wines/%d" % w_["id"])
+    call("DELETE", "/api/places/%d" % bt, {})
+
     # ---- export and import
     s, w2 = call("POST", "/api/wines", {"producer": "Export, \"Quote\" Test", "wine": "Export Test", "vintage": "NV", "color": "White", "quantity": 2,
                                         "price": 9.5, "value": 12, "location": "Shelf 9", "notes": "Hello", "ean": "7312345678902"})

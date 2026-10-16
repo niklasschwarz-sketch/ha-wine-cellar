@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.13.1
+- **Move many bottles:** use the filters and search to show the wines you want (a colour, a region, a producer…), then tap **Move these…** next to the place chips (or *Storage places → Move many bottles…*). Choose where the bottles are now (no place, anywhere, or a named place) and where they go.
+
 ## 0.13.0
 - **Storage places:** fridges, cellars, a bar. Switch on *Use several storage places* in *More → Settings*. Each bottle sits in one place, so a wine with several bottles can be spread over several places (4 in Cellar left, 2 in Fridge 1). The switch is off by default and nothing changes for a single shelf.
 - Your existing shelf texts become places the first time you switch it on, each holding that wine's bottles.
