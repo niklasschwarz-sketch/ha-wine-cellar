@@ -4,6 +4,10 @@ Home Assistant add-on: a filterable wine cellar app (add / drink / remove bottle
 Features: barcode scanning, label photo reading, pictures (paste or drop images), food and wine pairing, cellar temperature and humidity from Home Assistant, gift and occasion tags, printable bottle barcode labels, scores and reviews, printable wine list, edit table, stats, CSV export/import.
 
 ## Install
+[![Add this repository to your Home Assistant](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fniklasschwarz-sketch%2Fha-wine-cellar)
+
+**Quickest way:** tap the button above (it opens your own Home Assistant and asks you to confirm adding the repository). Then go to step 2. Or add it by hand:
+
 1. Add this repository (`https://github.com/niklasschwarz-sketch/ha-wine-cellar`) in Settings → Add-ons → Add-on store → ⋮ → Repositories.
 2. Install **Wine Cellar**, start it and turn on "Show in sidebar".
 
@@ -14,7 +18,7 @@ Home Assistant can only add public repositories. While this repo is private, cop
 ## For testers
 **What you need:** Home Assistant OS or Supervised (add-ons are not available on Container or Core installs), on a 64-bit Intel/AMD or ARM machine. About 100 MB of disk. The first install builds the add-on on your own system and downloads about 20 MB, so allow a few minutes.
 
-**Install:** add the repository as above, install **Wine Cellar**, start it and turn on "Show in sidebar". Nothing needs configuring. Import a CellarTracker CSV (**More → Import / export**) or add a few wines by hand.
+**Install:** tap the "Add repository" button above (or add the repository by hand), install **Wine Cellar**, start it and turn on "Show in sidebar". Nothing needs configuring. Import a CellarTracker CSV (**More → Import / export**) or add a few wines by hand.
 
 **What to try:** add and drink bottles, scan or type a barcode, paste a picture, open a bottle for "Goes well with", use **More → Dinner pairing**, tag a bottle as a gift with a birthday date, print a label from **More → Bottle labels** and scan it back, and (if you have cellar temperature or humidity sensors) pick them under **More → Cellar climate**.
 
