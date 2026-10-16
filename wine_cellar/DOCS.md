@@ -8,6 +8,16 @@
 
 That is all. There is nothing to configure: the add-on keeps your cellar in its own database file, so it needs no database server and touches nothing else on your system.
 
+## Privacy: what goes over the internet
+- **Pictures:** for each wine in stock the add-on asks Open Food Facts (a free, open database) for a picture, using the producer, wine name and barcode. Switch it off with the option `auto_images`.
+- **Systembolaget prices:** off by default. If you turn on `systembolaget_prices` it downloads a public price list once a week. Your own wines are never sent anywhere.
+- **Label reading** happens in your browser. The photo stays in your home.
+- Pairing, tags, reviews, labels and the climate strip run entirely inside Home Assistant.
+- The first install downloads the label reader (about 20 MB) from a public software CDN while the add-on is built.
+
+## Uninstalling
+Uninstall the add-on in Settings → Add-ons and tick the option to delete its data. That removes the database file. Nothing is left in Home Assistant itself. Remove the repository entry and any `/local_apps/wine_cellar` folder by hand, and delete old backups if you do not want a copy of the cellar to remain. With the optional Postgres database, the `winecellar` database and login stay in Postgres until you drop them.
+
 ## Where your data is, and backups
 Your cellar is one file inside the add-on (`/data/winecellar.db`). Home Assistant backups include it automatically. During a backup the add-on is stopped for a moment so the file is copied cleanly. You can also download a CSV (opens in Excel and Sheets) or a full JSON copy from **Import / export** at any time.
 
