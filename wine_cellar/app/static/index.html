@@ -355,6 +355,7 @@ details.more .charts{margin-top:12px}
           <button id="tableBtn" role="menuitem" type="button" title="Spreadsheet view to add, change and remove many wines and bottles at once">Edit table</button>
           <button id="menuBtn" role="menuitem" type="button" title="Restaurant-style wine list">Wine list</button>
           <button id="pairBtn" role="menuitem" type="button" title="Pick a dish and see which of your bottles go with it">Dinner pairing</button>
+          <button id="climateBtn" role="menuitem" type="button" title="Choose the cellar temperature and humidity sensors and the alarm limits">Cellar climate</button>
           <button id="labelBtn" role="menuitem" type="button" title="Print barcode labels for your bottles">Bottle labels</button>
           <button id="statsBtn" role="menuitem" type="button" title="Charts and numbers for the whole cellar">Stats</button>
           <button id="importBtn" role="menuitem" type="button" title="Export your cellar, or import a CSV">Import / export</button>
@@ -1160,7 +1161,7 @@ details.more .charts{margin-top:12px}
   function loadClimate() { return api('GET', 'api/climate').then(function (c) { climate = c; drawClimate(); }).catch(function () {}); }
   function drawClimate() {
     var box = $('climate'); box.replaceChildren();
-    if (!climate || !climate.configured) { box.hidden = true; return; }
+    if (!climate || !climate.configured || climate.show === false) { box.hidden = true; return; }
     box.hidden = false;
     [['temp', '🌡️', 'Temperature'], ['humidity', '💧', 'Humidity']].forEach(function (k) {
       var x = climate[k[0]]; if (!x) return;
@@ -1191,8 +1192,66 @@ details.more .charts{margin-top:12px}
         h('div', { 'class': 'note', text: 'Wanted: ' + lim[0] + ' to ' + lim[1] + ' ' + x.unit + (x.min24 != null ? ' · last 24 hours: ' + x.min24 + ' to ' + x.max24 : '') }),
         spark(x.series || [], lim[0], lim[1]), h('div', { 'class': 'note', text: x.entity })));
     });
-    body.appendChild(h('p', { 'class': 'note', text: 'Read from Home Assistant. Change the sensors and the wanted ranges in the add-on Configuration tab. The green band is the wanted range.' }));
-    openSheet('Cellar climate', body, [h('button', { type: 'button', 'class': 'btn', text: 'Refresh', onclick: function () { loadClimate().then(openClimateSheet); } })]);
+    body.appendChild(h('p', { 'class': 'note', text: 'Read from Home Assistant. Change the sensors, the wanted ranges and the alarm under Settings. The green band is the wanted range.' }));
+    openSheet('Cellar climate', body, [h('button', { type: 'button', 'class': 'btn', text: 'Settings', onclick: openClimateSettings }), h('button', { type: 'button', 'class': 'btn', text: 'Refresh', onclick: function () { loadClimate().then(openClimateSheet); } })]);
+  }
+
+  function openClimateSettings() {
+    var cur = (climate && climate.settings) || { tempEntity: '', humidityEntity: '', tempMin: 10, tempMax: 16, humidityMin: 60, humidityMax: 75, show: true, notify: false, notifyService: '' };
+    var msg = h('div', { 'class': 'err' }), note = h('div', { 'class': 'note' });
+    function sensorField(title, entity) {
+      var sel = h('select', { 'class': 'in', 'aria-label': title }, h('option', { value: '', text: 'None' }), h('option', { value: '__other', text: 'Other sensor, type its name…' }));
+      var typed = h('input', { 'class': 'in', placeholder: 'sensor.my_sensor', 'aria-label': title + ', sensor name', maxlength: 80 });
+      var known = {};
+      function sync() { typed.hidden = sel.value !== '__other'; }
+      sel.addEventListener('change', sync);
+      function add(items, group) {
+        if (!items.length) return;
+        var og = h('optgroup', { label: group });
+        items.forEach(function (x) { known[x.entity] = 1; og.appendChild(h('option', { value: x.entity, text: x.name + (x.state != null ? ' (' + x.state + (x.unit ? ' ' + x.unit : '') + ')' : '') })); });
+        sel.insertBefore(og, sel.lastChild);
+      }
+      function pick(v) { if (!v) sel.value = ''; else if (known[v]) sel.value = v; else { sel.value = '__other'; typed.value = v; } sync(); }
+      sync();
+      return { node: h('div', { 'class': 'f', style: 'gap:6px' }, h('div', { 'class': 'lab', text: title }), sel, typed), add: add, pick: pick,
+        value: function () { return sel.value === '__other' ? typed.value.trim() : sel.value; } };
+    }
+    var tf = sensorField('Temperature sensor', cur.tempEntity), hf = sensorField('Humidity sensor', cur.humidityEntity);
+    var num = function (v, label) { return h('input', { 'class': 'in', inputmode: 'decimal', value: String(v), 'aria-label': label }); };
+    var tMin = num(cur.tempMin, 'Lowest temperature'), tMax = num(cur.tempMax, 'Highest temperature'), hMin = num(cur.humidityMin, 'Lowest humidity'), hMax = num(cur.humidityMax, 'Highest humidity');
+    var show = h('input', { type: 'checkbox', id: 'clShow' }), notify = h('input', { type: 'checkbox', id: 'clNotify' });
+    show.checked = cur.show !== false; notify.checked = !!cur.notify;
+    var svc = h('input', { 'class': 'in', placeholder: 'notify.mobile_app_my_phone (empty = a message inside Home Assistant)', 'aria-label': 'Notification service', value: cur.notifyService || '', maxlength: 80 });
+    api('GET', 'api/climate/sensors').then(function (d) {
+      tf.add(d.temperature, 'Temperature sensors'); tf.add(d.other, 'Other numeric sensors');
+      hf.add(d.humidity, 'Humidity sensors'); hf.add(d.other, 'Other numeric sensors');
+      tf.pick(cur.tempEntity); hf.pick(cur.humidityEntity);
+      if (!d.temperature.length && !d.humidity.length) note.textContent = 'Home Assistant has no sensors marked as temperature or humidity. Choose from the other sensors or type a name.';
+    }).catch(function (e) { note.textContent = e.message; tf.pick(cur.tempEntity); hf.pick(cur.humidityEntity); });
+    function collect() {
+      return { tempEntity: tf.value(), humidityEntity: hf.value(), tempMin: tMin.value, tempMax: tMax.value, humidityMin: hMin.value, humidityMax: hMax.value, show: show.checked, notify: notify.checked, notifyService: svc.value.trim() };
+    }
+    var save = h('button', { type: 'button', 'class': 'btn primary', text: 'Save', onclick: function () {
+      msg.textContent = ''; save.disabled = true;
+      api('PUT', 'api/climate/settings', collect()).then(function () { return loadClimate(); }).then(function () { toast('Cellar climate saved'); dlg.close(); })
+        .catch(function (e) { msg.textContent = e.message; save.disabled = false; });
+    } });
+    var test = h('button', { type: 'button', 'class': 'btn', text: 'Send a test message', onclick: function () {
+      msg.textContent = ''; test.disabled = true;
+      api('PUT', 'api/climate/settings', collect()).then(function () { return api('POST', 'api/climate/test'); })
+        .then(function () { note.textContent = 'Test message sent. Look for it in Home Assistant.'; })
+        .catch(function (e) { msg.textContent = e.message; }).then(function () { test.disabled = false; });
+    } });
+    var two = function (a, b) { return h('div', { 'class': 'form2' }, a, b); };
+    openSheet('Cellar climate', h('div', { 'class': 'f', style: 'gap:14px' },
+      h('p', { 'class': 'note', text: 'Pick the sensors in your cellar. The page shows their readings and marks them orange outside the wanted range. Leave a sensor on None to hide it.' }),
+      tf.node, hf.node,
+      h('div', { 'class': 'f' }, h('div', { 'class': 'lab', text: 'Wanted temperature (lowest, highest)' }), two(tMin, tMax)),
+      h('div', { 'class': 'f' }, h('div', { 'class': 'lab', text: 'Wanted humidity in % (lowest, highest)' }), two(hMin, hMax)),
+      h('label', { 'class': 'note' }, show, ' Show the readings at the top of the page'),
+      h('label', { 'class': 'note' }, notify, ' Send me an alarm in Home Assistant when a reading is outside its range (once, then again after 6 hours)'),
+      h('div', { 'class': 'f', style: 'gap:6px' }, h('div', { 'class': 'lab', text: 'Send the alarm to (optional)' }), svc),
+      note, msg), [test, save]);
   }
 
   /* ---------- bottle labels (Code 128) ---------- */
@@ -1742,6 +1801,7 @@ details.more .charts{margin-top:12px}
   $('racksBtn').addEventListener('click', function () { openRacks(); });
   $('statsBtn').addEventListener('click', openStats);
   $('labelBtn').addEventListener('click', function () { openLabelSheet(); });
+  $('climateBtn').addEventListener('click', function () { openClimateSettings(); });
   $('pairBtn').addEventListener('click', function () { openPairSheet(); });
   $('tableBtn').addEventListener('click', openTable);
   $('chartsBox').addEventListener('toggle', render);

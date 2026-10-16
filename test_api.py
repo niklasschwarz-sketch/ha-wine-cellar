@@ -27,22 +27,39 @@ TMP = tempfile.mkdtemp(prefix="winecellar-test-")
 DB = os.path.join(TMP, "sub", "winecellar.db")  # the sub folder must be created by the server
 MOCK_PORT = PORT + 1
 ENV = dict(os.environ, DB_TYPE="sqlite", SQLITE_PATH=DB, PORT=str(PORT), AUTO_IMAGES="0", AUTO_PRICES="0",
-           HA_API="http://127.0.0.1:%d/api" % MOCK_PORT, SUPERVISOR_TOKEN="test-token",
+           HA_API="http://127.0.0.1:%d/api" % MOCK_PORT, SUPERVISOR_TOKEN="test-token", CLIMATE_CHECK_SECS="1", CLIMATE_RENOTIFY_SECS="3600",
            CLIMATE_TEMP_ENTITY="sensor.cellar_temp", CLIMATE_HUMIDITY_ENTITY="sensor.cellar_humidity", HUMIDITY_MIN="60", HUMIDITY_MAX="75")
 
 # A tiny stand-in for the Home Assistant API: two sensors, one fine and one too dry.
 import http.server
 import threading
 SEEN_AUTH = []
+POSTED = []
 
 
 class MockHA(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
+    def do_POST(self):
+        n = int(self.headers.get("Content-Length") or 0)
+        POSTED.append((self.path, json.loads(self.rfile.read(n).decode() or "{}")))
+        self.send_response(200)
+        self.send_header("Content-Length", "2")
+        self.end_headers()
+        self.wfile.write(b"[]")
+
     def do_GET(self):
         SEEN_AUTH.append(self.headers.get("Authorization"))
-        if self.path.startswith("/api/states/sensor.cellar_temp"):
+        if self.path == "/api/states":
+            body = [
+                {"entity_id": "sensor.cellar_temp", "state": "13.5", "attributes": {"device_class": "temperature", "unit_of_measurement": "\u00b0C", "friendly_name": "Cellar temp"}},
+                {"entity_id": "sensor.cellar_humidity", "state": "48", "attributes": {"device_class": "humidity", "unit_of_measurement": "%", "friendly_name": "Cellar humidity"}},
+                {"entity_id": "sensor.garage_temp", "state": "unavailable", "attributes": {"device_class": "temperature", "friendly_name": "Garage"}},
+                {"entity_id": "sensor.power", "state": "420", "attributes": {"unit_of_measurement": "W", "friendly_name": "Power"}},
+                {"entity_id": "light.kitchen", "state": "on", "attributes": {}},
+            ]
+        elif self.path.startswith("/api/states/sensor.cellar_temp"):
             body = {"state": "13.5", "attributes": {"unit_of_measurement": "\u00b0C", "friendly_name": "Cellar temp"}}
         elif self.path.startswith("/api/states/sensor.cellar_humidity"):
             body = {"state": "48", "attributes": {"unit_of_measurement": "%", "friendly_name": "Cellar humidity"}}
@@ -286,6 +303,49 @@ try:
     check("humidity too dry is flagged", c["humidity"]["value"] == 48 and c["humidity"]["status"] == "low", c["humidity"])
     check("24 hour range and series come from history", c["temp"]["min24"] == 12.0 and c["temp"]["max24"] == 14.2 and len(c["temp"]["series"]) == 3 and c["humidity"]["max24"] == 50, c["temp"])
     check("add-on sends its token to Home Assistant", set(SEEN_AUTH) == {"Bearer test-token"}, set(SEEN_AUTH))
+
+    # ---- climate menu: sensor picker, settings, alarm
+    s, sn = call("GET", "/api/climate/sensors")
+    check("sensor picker lists temperature and humidity sensors", s == 200 and [x["entity"] for x in sn["temperature"]] == ["sensor.cellar_temp", "sensor.garage_temp"] and [x["entity"] for x in sn["humidity"]] == ["sensor.cellar_humidity"], sn)
+    check("other numeric sensors are offered, lights are not", [x["entity"] for x in sn["other"]] == ["sensor.power"], sn["other"])
+    s, cs = call("GET", "/api/climate/settings")
+    check("settings start from the add-on options", cs["tempEntity"] == "sensor.cellar_temp" and cs["notify"] is False and cs["show"] is True, cs)
+    s, e = call("PUT", "/api/climate/settings", {"tempEntity": "not a sensor"})
+    check("bad sensor name refused", s == 400, e)
+    s, e = call("PUT", "/api/climate/settings", {"tempMin": 20, "tempMax": 10})
+    check("lowest above highest refused", s == 400, e)
+    s, e = call("PUT", "/api/climate/settings", {"humidityMin": "abc"})
+    check("non-numeric limit refused", s == 400, e)
+    s, e = call("PUT", "/api/climate/settings", {"notifyService": "light.kitchen"})
+    check("notification service must be notify.something", s == 400, e)
+    s, cs = call("PUT", "/api/climate/settings", {"tempEntity": "sensor.cellar_temp", "humidityEntity": "sensor.cellar_humidity", "tempMin": 14, "tempMax": 18, "humidityMin": 55, "humidityMax": 80, "notify": False})
+    check("settings are saved", s == 200 and cs["tempMin"] == 14 and cs["humidityMax"] == 80, cs)
+    s, c = call("GET", "/api/climate")
+    check("new limits are used (13.5 is now too low)", c["temp"]["status"] == "low" and c["limits"]["temp"] == [14, 18], c["limits"])
+    s, c2 = call("PUT", "/api/climate/settings", {"show": False})
+    s, c = call("GET", "/api/climate")
+    check("show flag is passed to the page", c["show"] is False and c["configured"] is True, c.get("show"))
+    s, c2 = call("PUT", "/api/climate/settings", {"show": True, "tempEntity": "", "humidityEntity": ""})
+    check("clearing both sensors turns the strip off", call("GET", "/api/climate")[1]["configured"] is False)
+    POSTED.clear()
+    call("PUT", "/api/climate/settings", {"tempEntity": "sensor.cellar_temp", "humidityEntity": "sensor.cellar_humidity", "tempMin": 10, "tempMax": 16, "humidityMin": 60, "humidityMax": 75, "notify": False})
+    time.sleep(2.5)
+    check("no alarm while alerts are off", POSTED == [], POSTED)
+    s, d = call("POST", "/api/climate/test")
+    check("test message goes to Home Assistant", s == 200 and POSTED and POSTED[-1][0] == "/api/services/persistent_notification/create", POSTED)
+    POSTED.clear()
+    call("PUT", "/api/climate/settings", {"notify": True})
+    time.sleep(3.5)
+    alarms = [p for p in POSTED if "Wine cellar" in p[1].get("title", "")]
+    check("a dry cellar raises one alarm", len(alarms) == 1 and "humidity" in alarms[0][1]["title"].lower() and "48" in alarms[0][1]["message"], POSTED)
+    check("the in-range temperature raises none", not any("temperature" in p[1].get("title", "").lower() for p in POSTED), POSTED)
+    time.sleep(2.5)
+    check("it is not repeated every check", len([p for p in POSTED if "humidity" in p[1].get("title", "").lower()]) == 1, POSTED)
+    POSTED.clear()
+    call("PUT", "/api/climate/settings", {"notifyService": "notify.mobile_app_phone"})
+    time.sleep(3.5)
+    check("a notify service is used when chosen", any(p[0] == "/api/services/notify/mobile_app_phone" for p in POSTED), POSTED)
+    call("PUT", "/api/climate/settings", {"notify": False, "notifyService": ""})
 
     # ---- page and unknown paths
     with urllib.request.urlopen(BASE + "/", timeout=5) as r:

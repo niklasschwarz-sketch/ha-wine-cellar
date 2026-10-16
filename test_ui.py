@@ -29,12 +29,29 @@ import threading
 import datetime
 
 
+POSTED = []
+
+
 class MockHA(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
+    def do_POST(self):
+        n = int(self.headers.get("Content-Length") or 0)
+        POSTED.append((self.path, json.loads(self.rfile.read(n).decode() or "{}")))
+        self.send_response(200)
+        self.send_header("Content-Length", "2")
+        self.end_headers()
+        self.wfile.write(b"[]")
+
     def do_GET(self):
-        if self.path.startswith("/api/states/sensor.t"):
+        if self.path == "/api/states":
+            body = [{"entity_id": "sensor.t", "state": "17.2", "attributes": {"device_class": "temperature", "unit_of_measurement": "C", "friendly_name": "Cellar temp"}},
+                    {"entity_id": "sensor.h", "state": "68", "attributes": {"device_class": "humidity", "unit_of_measurement": "%", "friendly_name": "Cellar humidity"}},
+                    {"entity_id": "sensor.t2", "state": "9", "attributes": {"device_class": "temperature", "unit_of_measurement": "C", "friendly_name": "Fridge"}}]
+        elif self.path.startswith("/api/states/sensor.t2"):
+            body = {"state": "9", "attributes": {"unit_of_measurement": "C", "friendly_name": "Fridge"}}
+        elif self.path.startswith("/api/states/sensor.t"):
             body = {"state": "17.2", "attributes": {"unit_of_measurement": "C", "friendly_name": "Cellar temp"}}
         elif self.path.startswith("/api/states/sensor.h"):
             body = {"state": "68", "attributes": {"unit_of_measurement": "%", "friendly_name": "Cellar humidity"}}
@@ -214,7 +231,54 @@ try:
         page.locator("#climate .cl").first.click()
         page.wait_for_selector("dialog[open] svg polyline")
         check("climate sheet draws the last 24 hours", True)
+        page.get_by_role("button", name="Settings").click()
+        page.wait_for_selector("dialog[open] select[aria-label='Temperature sensor']")
+        check("climate sheet leads to the settings", True)
         page.keyboard.press("Escape")
+
+        # ---- climate settings menu
+        page.click("#moreBtn")
+        page.click("#climateBtn")
+        page.wait_for_selector("dialog[open] select[aria-label='Temperature sensor'] option[value='sensor.t2']", state="attached")
+        opts = page.locator("dialog[open] select[aria-label='Humidity sensor'] option").all_inner_texts()
+        check("picker lists the humidity sensor with its reading", any("Cellar humidity (68 %)" in o for o in opts), opts)
+        check("current choice is preselected", page.locator("dialog[open] select[aria-label='Temperature sensor']").input_value() == "sensor.t")
+        page.fill("dialog[open] input[aria-label='Highest temperature']", "20")
+        page.select_option("dialog[open] select[aria-label='Temperature sensor']", "sensor.t2")
+        page.fill("dialog[open] input[aria-label='Lowest temperature']", "5")
+        page.check("dialog[open] #clNotify")
+        page.fill("dialog[open] input[aria-label='Notification service']", "not valid")
+        page.click("dialog[open] button:has-text('Save')")
+        page.wait_for_selector("dialog[open] .err:not(:empty)")
+        check("a bad notification service is explained", "notify." in page.locator("dialog[open] .err").inner_text())
+        page.fill("dialog[open] input[aria-label='Notification service']", "")
+        page.click("dialog[open] button:has-text('Send a test message')")
+        page.wait_for_selector("dialog[open] .note:has-text('Test message sent')")
+        check("test message reaches Home Assistant", any(p[0] == "/api/services/persistent_notification/create" for p in POSTED), POSTED)
+        page.click("dialog[open] button:has-text('Save')")
+        page.wait_for_function("() => !document.querySelector('dialog[open]')")
+        page.wait_for_function("() => document.querySelector('#climate').innerText.indexOf('Cellar') === -1 && document.querySelector('#climate .cl.ok')")
+        txt = page.locator("#climate").inner_text()
+        check("strip now shows the chosen sensor within its new range", "9" in txt and page.locator("#climate .cl.ok").count() >= 1, txt)
+        saved = api("GET", "/api/climate/settings")
+        check("choices are saved on the server", saved["tempEntity"] == "sensor.t2" and saved["tempMax"] == 20 and saved["notify"] is True, saved)
+        page.click("#moreBtn")
+        page.click("#climateBtn")
+        page.wait_for_selector("dialog[open] #clShow")
+        page.uncheck("dialog[open] #clShow")
+        page.uncheck("dialog[open] #clNotify")
+        page.click("dialog[open] button:has-text('Save')")
+        page.wait_for_function("() => document.querySelector('#climate').hidden")
+        check("untick Show hides the strip", True)
+        page.click("#moreBtn")
+        page.click("#climateBtn")
+        page.wait_for_selector("dialog[open] #clShow")
+        page.check("dialog[open] #clShow")
+        page.select_option("dialog[open] select[aria-label='Temperature sensor']", "sensor.t")
+        page.fill("dialog[open] input[aria-label='Lowest temperature']", "10")
+        page.fill("dialog[open] input[aria-label='Highest temperature']", "16")
+        page.click("dialog[open] button:has-text('Save')")
+        page.wait_for_selector("#climate .cl.high")
 
         # ---- tags and occasions
         pair_id = [w["id"] for w in api("GET", "/api/wines")["wines"] if w["producer"] == "Pair Estate"][0]

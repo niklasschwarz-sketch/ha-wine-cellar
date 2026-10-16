@@ -968,12 +968,96 @@ def delete_review(rid):
 
 # ---------------------------------------------------------------- cellar climate (from Home Assistant)
 _climate_cache = {"t": 0, "v": None}
+ENTITY_RE = re.compile(r"^[a-z_]+\.[a-z0-9_]+$")
+NOTIFY_RE = re.compile(r"^notify\.[a-z0-9_]+$")
+
+
+def climate_settings():
+    """What the person chose in the Cellar climate menu. Options from older versions (environment) are the starting point."""
+    d = {"tempEntity": CLIMATE_TEMP, "humidityEntity": CLIMATE_HUM, "tempMin": TEMP_MIN, "tempMax": TEMP_MAX,
+         "humidityMin": HUM_MIN, "humidityMax": HUM_MAX, "show": True, "notify": False, "notifyService": ""}
+    try:
+        saved = json.loads(meta_get("climate_settings") or "{}")
+    except ValueError:
+        saved = {}
+    if isinstance(saved, dict):
+        d.update({k: v for k, v in saved.items() if k in d})
+    return d
+
+
+def save_climate_settings(data):
+    cur = climate_settings()
+    for key, pat in (("tempEntity", ENTITY_RE), ("humidityEntity", ENTITY_RE)):
+        if key in data:
+            v = txt(data.get(key), 80).lower()
+            if v and not pat.match(v):
+                raise ApiError(400, "That does not look like a sensor name. It should look like sensor.cellar_temperature")
+            cur[key] = v
+    if "notifyService" in data:
+        v = txt(data.get("notifyService"), 80).lower()
+        if v and not NOTIFY_RE.match(v):
+            raise ApiError(400, "The notification service should look like notify.mobile_app_my_phone, or be empty for a message inside Home Assistant")
+        cur["notifyService"] = v
+    for key in ("show", "notify"):
+        if key in data:
+            cur[key] = bool(data.get(key))
+    for lo, hi, what in (("tempMin", "tempMax", "temperature"), ("humidityMin", "humidityMax", "humidity")):
+        for key in (lo, hi):
+            if key in data:
+                v = num(data.get(key), None)
+                if v is None:
+                    raise ApiError(400, "The %s limits must be numbers" % what)
+                cur[key] = v
+        if cur[lo] >= cur[hi]:
+            raise ApiError(400, "The lowest %s must be below the highest" % what)
+    meta_set("climate_settings", json.dumps(cur))
+    _climate_cache.update(t=0, v=None)
+    _alerted.clear()
+    return cur
 
 
 def _ha_get(path):
     req = urllib.request.Request(HA_API + path, headers={"Authorization": "Bearer " + HA_TOKEN, "Content-Type": "application/json", "User-Agent": USER_AGENT})
     with urllib.request.urlopen(req, timeout=8) as r:
         return json.loads(r.read().decode("utf-8"))
+
+
+def _ha_post(path, body):
+    req = urllib.request.Request(HA_API + path, data=json.dumps(body).encode("utf-8"), method="POST",
+                                 headers={"Authorization": "Bearer " + HA_TOKEN, "Content-Type": "application/json", "User-Agent": USER_AGENT})
+    with urllib.request.urlopen(req, timeout=8) as r:
+        r.read()
+
+
+def list_sensors():
+    """Temperature and humidity sensors Home Assistant knows about, for the picker."""
+    try:
+        states = _ha_get("/states")
+    except (urllib.error.URLError, OSError, ValueError):
+        raise ApiError(502, "Could not reach Home Assistant. You can still type the sensor name yourself.")
+    out = {"temperature": [], "humidity": [], "other": []}
+    for st in states if isinstance(states, list) else []:
+        eid = st.get("entity_id", "")
+        if not eid.startswith("sensor."):
+            continue
+        at = st.get("attributes") or {}
+        try:
+            float(st.get("state"))
+            numeric = True
+        except (TypeError, ValueError):
+            numeric = False
+        item = {"entity": eid, "name": at.get("friendly_name") or eid, "state": st.get("state"), "unit": at.get("unit_of_measurement", "")}
+        cls = at.get("device_class")
+        if cls == "temperature":
+            out["temperature"].append(item)
+        elif cls == "humidity":
+            out["humidity"].append(item)
+        elif numeric:
+            out["other"].append(item)
+    for k in out:
+        out[k].sort(key=lambda x: x["name"].lower())
+    out["other"] = out["other"][:300]
+    return out
 
 
 def _reading(entity, lo, hi, start_iso):
@@ -1007,19 +1091,68 @@ def _reading(entity, lo, hi, start_iso):
     return out
 
 
-def climate():
-    if not (CLIMATE_TEMP or CLIMATE_HUM):
-        return {"configured": False}
-    if time.time() - _climate_cache["t"] < 60 and _climate_cache["v"]:
+def climate(force=False):
+    cs = climate_settings()
+    if not (cs["tempEntity"] or cs["humidityEntity"]):
+        return {"configured": False, "settings": cs}
+    if not force and time.time() - _climate_cache["t"] < 60 and _climate_cache["v"]:
         return _climate_cache["v"]
     start = (datetime.now(timezone.utc) - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S+00:00")
-    res = {"configured": True, "limits": {"temp": [TEMP_MIN, TEMP_MAX], "humidity": [HUM_MIN, HUM_MAX]}, "temp": None, "humidity": None}
-    if CLIMATE_TEMP:
-        res["temp"] = _reading(CLIMATE_TEMP, TEMP_MIN, TEMP_MAX, start)
-    if CLIMATE_HUM:
-        res["humidity"] = _reading(CLIMATE_HUM, HUM_MIN, HUM_MAX, start)
+    res = {"configured": True, "show": cs["show"], "settings": cs, "limits": {"temp": [cs["tempMin"], cs["tempMax"]], "humidity": [cs["humidityMin"], cs["humidityMax"]]}, "temp": None, "humidity": None}
+    if cs["tempEntity"]:
+        res["temp"] = _reading(cs["tempEntity"], cs["tempMin"], cs["tempMax"], start)
+    if cs["humidityEntity"]:
+        res["humidity"] = _reading(cs["humidityEntity"], cs["humidityMin"], cs["humidityMax"], start)
     _climate_cache.update(t=time.time(), v=res)
     return res
+
+
+_alerted = {}
+RENOTIFY_SECS = float(os.environ.get("CLIMATE_RENOTIFY_SECS", str(6 * 3600)))
+CHECK_SECS = float(os.environ.get("CLIMATE_CHECK_SECS", "300"))
+
+
+def send_notification(title, message, service="", nid="wine_cellar_climate"):
+    if service:
+        _ha_post("/services/notify/" + service.split(".", 1)[1], {"title": title, "message": message})
+    else:
+        _ha_post("/services/persistent_notification/create", {"title": title, "message": message, "notification_id": nid})
+
+
+def climate_alarm_check():
+    """One pass: tell the person once when a reading goes outside its range, again only after RENOTIFY_SECS, and forget it when it is back in range."""
+    cs = climate_settings()
+    if not cs["notify"]:
+        return
+    res = climate(force=True)
+    if not res.get("configured"):
+        return
+    for key, label in (("temp", "Temperature"), ("humidity", "Humidity")):
+        x = res.get(key)
+        if not x:
+            continue
+        if x["status"] in ("low", "high"):
+            last = _alerted.get(key)
+            if last is None or time.time() - last >= RENOTIFY_SECS:
+                lim = res["limits"][key]
+                msg = "%s in the wine cellar is %s %s, %s the wanted range %s to %s." % (label, x["value"], x["unit"], "below" if x["status"] == "low" else "above", lim[0], lim[1])
+                try:
+                    send_notification("Wine cellar: %s %s" % (label.lower(), "too low" if x["status"] == "low" else "too high"), msg, cs["notifyService"], "wine_cellar_" + key)
+                    _alerted[key] = time.time()
+                except Exception as e:
+                    log("Could not send the climate alert:", type(e).__name__)
+        elif x["status"] == "ok":
+            _alerted.pop(key, None)
+
+
+def climate_worker():
+    time.sleep(min(30.0, CHECK_SECS))
+    while True:
+        try:
+            climate_alarm_check()
+        except Exception as e:
+            log("Climate check error:", type(e).__name__, str(e)[:160])
+        time.sleep(CHECK_SECS)
 
 
 def export_json():
@@ -1631,6 +1764,20 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, delete_review(int(parts[1])))
         if parts == ["climate"] and method == "GET":
             return self._send(200, climate())
+        if parts == ["climate", "sensors"] and method == "GET":
+            return self._send(200, list_sensors())
+        if parts == ["climate", "settings"]:
+            if method == "GET":
+                return self._send(200, climate_settings())
+            if method == "PUT":
+                return self._send(200, save_climate_settings(self._json()))
+        if parts == ["climate", "test"] and method == "POST":
+            cs = climate_settings()
+            try:
+                send_notification("Wine cellar: test", "This is a test message from the Wine Cellar add-on.", cs["notifyService"], "wine_cellar_test")
+            except Exception:
+                raise ApiError(502, "Home Assistant did not accept the message. Check the notification service name.")
+            return self._send(200, {"sent": True})
         if parts == ["pairing", "dishes"] and method == "GET":
             return self._send(200, {"dishes": pairing.search_dishes(q.get("q", [""])[0])})
         if parts == ["pairing", "find"] and method == "GET":
@@ -1723,6 +1870,7 @@ def main():
         log("Could not reach the database. Check the add-on options (host, name, user, password).")
     threading.Thread(target=image_worker, daemon=True).start()
     threading.Thread(target=price_worker, daemon=True).start()
+    threading.Thread(target=climate_worker, daemon=True).start()
     srv = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
     log("Wine Cellar listening on port %d (%s)" % (PORT, DB_TYPE))
     srv.serve_forever()

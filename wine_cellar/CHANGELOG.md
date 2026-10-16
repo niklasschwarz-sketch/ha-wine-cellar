@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.10.0
+- **Cellar climate menu:** *More → Cellar climate* lets you pick the temperature and humidity sensors from a list of what Home Assistant has, set the wanted lowest and highest values, choose whether the readings show at the top of the page, and switch on an alarm. The alarm sends one message to Home Assistant (or a phone notification service you name) when a reading leaves its range, and again only after 6 hours. The climate options are gone from the Configuration tab, since everything is set in the app. Sensors you set up in 0.9.0 keep working until you change them.
+- **Simpler Configuration tab:** the database options are gone. The add-on always uses its built-in database file, which Home Assistant backups include. The Postgres option and the Grafana views are no longer offered.
+- New add-on icon and logo
+
 ## 0.9.0
 - **Cellar climate:** the add-on reads your temperature and humidity sensors from Home Assistant and shows them at the top of the page, marked orange when outside the range you want. Tap one for the last 24 hours. Set `climate_temp_entity` and `climate_humidity_entity` (for example `sensor.cellar_temperature`) and the wanted ranges in the Configuration tab. Nothing is shown until you set a sensor.
 - **Tags and occasions:** mark a bottle as a gift you received, a gift you gave, or kept for a special occasion, with an optional occasion (birthday, anniversary, wedding, Christmas, graduation, dinner), person, date and note. Dates can repeat every year; birthdays and anniversaries in the next 45 days appear under **Coming up**. You can also filter the cellar by tag.
