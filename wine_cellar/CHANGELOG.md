@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.14.0
+- **New look:** a light, quiet design. Wine cards have a tinted bottle picture on the left, the bottle count and prices in a clean number font, and a thin drinking-window line.
+- **New navigation:** a bar along the bottom on a phone (Cellar, Drink, a round **+** to add a wine, Stats, More) and a slim bar down the left side on a landscape screen such as a wall tablet in Home Assistant. *Drink* shows the wines that are ready to drink now.
+- **Place tabs:** your storage places are now underlined tabs above the list, with the bottle count on each. The cellar temperature and humidity are one small line beside them, and only turn red when something is out of range.
+- The filter panel starts closed. Tap **Filters** to open it.
+- Your data, settings and backups are unchanged.
+
 ## 0.13.2
 - **Clearer wine list:** each card now starts with the wine name, with the year small after it, then the producer. Tap the picture or the name to open the wine page.
 - **Open one** and **+1** moved to the wine page (bottom buttons), together with Edit and More… (change picture, print label, remove one, delete). The list cards are calmer without buttons.

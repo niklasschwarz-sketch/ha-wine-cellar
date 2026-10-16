@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Wine cellar</title>
 <style>
-:root{--bg:#1a1410;--panel:#261d17;--panel2:#31251c;--fg:#f1e8d9;--muted:#ab9d88;--line:rgba(222,196,152,.17);--fill:rgba(222,196,152,.10);--accent:#e0b25a;--on-accent:#1a1410;--wine:#8f2535;--blue:var(--accent);--green:#7dc383;--orange:#e39a4a;--danger:#ef7a68;--r:14px;--glow:rgba(224,178,90,.17);--shadow:0 1px 0 rgba(255,235,200,.04) inset,0 6px 18px rgba(0,0,0,.28);--serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;color-scheme:dark}
+:root{--bg:#f7f8f9;--panel:#ffffff;--panel2:#ffffff;--fg:#14181c;--muted:#4b5560;--line:#dde2e6;--fill:rgba(20,24,28,.06);--accent:#0b5ca8;--on-accent:#ffffff;--wine:#6e1f33;--blue:var(--accent);--green:#0e7c66;--orange:#b7791f;--danger:#b3261e;--r:14px;--glow:transparent;--shadow:0 1px 2px rgba(20,24,28,.06);--sans:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI','Helvetica Neue',Roboto,sans-serif;--serif:var(--sans);--mono:ui-monospace,'SF Mono','IBM Plex Mono',Menlo,Consolas,monospace;color-scheme:light}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','SF Pro Display','Helvetica Neue',system-ui,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%}
 body{padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(24px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
@@ -321,6 +321,57 @@ details.more{margin:16px 0}
 details.more>summary{cursor:pointer;font-weight:600;min-height:32px;display:flex;align-items:center}
 details.more .charts{margin-top:12px}
 .sec>h2,.ct,.sh h2{font-family:var(--serif)}
+/* ---- 0.14 look: light, quiet, picture cards, place tabs, dock navigation ---- */
+body{background:var(--bg);font-family:var(--sans);padding-bottom:calc(92px + env(safe-area-inset-bottom))}
+.title{font-family:var(--sans);font-weight:600;font-size:1.6rem;letter-spacing:0}
+.take{font-size:.9rem}
+.btn.primary{background:var(--accent);color:var(--on-accent)}
+.menu{box-shadow:0 12px 32px rgba(20,24,28,.18)}
+.kpis{box-shadow:none}
+.kpis .kv{font-family:var(--mono);font-size:1.25rem;font-weight:500}
+.card{box-shadow:none}
+.grid{gap:12px}
+.wine{border-left:0;background:var(--panel);padding:12px;gap:0}
+.wine .row{align-items:flex-start;gap:14px}
+.pic{width:4.7rem;height:6.8rem;min-height:0;padding:0;border-radius:10px;background:color-mix(in srgb,var(--c) 15%,#fff);display:flex;align-items:center;justify-content:center}
+.pic svg{width:2.3rem;margin:0}
+.pic.has{width:4.7rem;height:6.8rem;padding:4px;background:#fff;box-shadow:inset 0 0 0 1px var(--line)}
+.pic img{width:100%;height:100%;object-fit:contain}
+.wname{font-family:var(--sans);font-size:1.05rem;font-weight:600}
+.wine .vint{font-size:.85rem}
+.qty{background:none;padding:0;font-family:var(--mono);font-size:1.1rem;font-weight:500}
+.wine .prod{font-size:.88rem}
+.wine .vl{font-family:var(--mono);font-size:.75rem}
+.wlab{font-family:var(--mono);font-size:.72rem}
+.wlab b{font-family:var(--sans);font-size:.78rem}
+.wtrack{height:4px}
+.wtrack u{top:-3px;bottom:-3px}
+.pcrow{display:flex;justify-content:space-between;align-items:flex-end;gap:4px 18px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin:0 0 12px}
+.pcrow:not(:has(>:not([hidden]))){display:none}
+.placebar{padding:0;margin:0;gap:22px;flex:0 1 auto;min-width:0}
+.placebar .chip{background:none;border-radius:0;padding:0 0 10px;min-height:44px;border-bottom:2px solid transparent;color:var(--muted);transition:none}
+.placebar .chip[aria-pressed=true]{background:none;color:var(--fg);font-weight:600;border-bottom-color:var(--accent)}
+.placebar .chip em{font-family:var(--mono);opacity:.8}
+.placebar .btn.sm{margin-bottom:6px}
+.climate{margin:0 0 10px;gap:4px 16px}
+#climate .cl{background:none;box-shadow:none;border-radius:0;min-height:32px;padding:0;font-family:var(--mono);font-size:.78rem;color:var(--muted);gap:6px;height:auto}
+#climate .cl b{font-weight:500;color:var(--fg)}
+#climate .cl.high,#climate .cl.low,#climate .cl.high b,#climate .cl.low b{color:var(--danger);background:none}
+.dock{position:fixed;z-index:40;left:0;right:0;bottom:0;height:calc(68px + env(safe-area-inset-bottom));padding:6px 8px env(safe-area-inset-bottom);background:var(--panel);border-top:1px solid var(--line);display:flex;justify-content:space-around;align-items:center}
+.dk{appearance:none;border:0;background:none;color:var(--muted);min-width:56px;min-height:44px;padding:0 8px;font-size:.78rem;font-weight:500;border-radius:12px;cursor:pointer}
+.dk.on{color:var(--accent);font-weight:600}
+.dk.add{width:52px;height:52px;min-width:0;padding:0;margin-top:-26px;border-radius:50%;background:var(--accent);color:var(--on-accent);font-size:1.8rem;line-height:1;font-weight:400;box-shadow:0 4px 12px rgba(11,92,168,.3)}
+.dock .menuwrap{display:flex}
+.dock .menu{top:auto;bottom:calc(100% + 14px);right:0}
+body.printlabels .dock,body.printmenu .dock{display:none!important}
+@media (min-width:56rem){
+  body{padding-left:calc(104px + 28px);padding-bottom:max(24px,env(safe-area-inset-bottom))}
+  .dock{top:0;right:auto;bottom:0;width:104px;height:auto;flex-direction:column;justify-content:flex-start;gap:8px;padding:28px 0;border-top:0;border-right:1px solid var(--line)}
+  .dk{width:80px;min-height:56px;font-size:.88rem}
+  .dk.add{order:-1;width:56px;height:56px;margin:0 0 20px}
+  .dock .menu{position:fixed;bottom:16px;top:auto;left:calc(104px + 10px);right:auto}
+  .title{font-size:1.75rem}
+}
 @media (max-width:56rem){.layout{grid-template-columns:minmax(0,1fr)}.side{position:static;max-height:none}.title{font-size:1.7rem}}
 @media (max-width:40rem){.kpis{grid-template-columns:repeat(3,1fr);margin-bottom:10px}.kpis .card:nth-child(n+4){display:none}.kpis .kv{font-size:1.25rem}.tools h2{flex:0 0 100%}.tools .in#q{flex:0 0 100%;order:-1}.tools h2{order:-2}}
 @media print{
@@ -349,22 +400,7 @@ details.more .charts{margin-top:12px}
       <p class="take" id="take"></p>
     </div>
     <div class="hactions">
-      <button class="btn primary" id="addBtn" type="button">+ Add wine</button>
       <button class="btn" id="scanBtn" type="button" title="Add or find a bottle by barcode or a photo of its label">Scan</button>
-      <div class="menuwrap">
-        <button class="btn" id="moreBtn" type="button" aria-haspopup="menu" aria-expanded="false">More ▾</button>
-        <div class="menu" id="moreMenu" role="menu" hidden>
-          <button id="tableBtn" role="menuitem" type="button" title="Spreadsheet view to add, change and remove many wines and bottles at once">Edit table</button>
-          <button id="menuBtn" role="menuitem" type="button" title="Restaurant-style wine list">Wine list</button>
-          <button id="pairBtn" role="menuitem" type="button" title="Pick a dish and see which of your bottles go with it">Dinner pairing</button>
-          <button id="settingsBtn" role="menuitem" type="button" title="Country, currency, temperature unit, number and date format, paper size">Settings</button>
-          <button id="climateBtn" role="menuitem" type="button" title="Choose the cellar temperature and humidity sensors and the alarm limits">Cellar climate</button>
-          <button id="labelBtn" role="menuitem" type="button" title="Print barcode labels for your bottles">Bottle labels</button>
-          <button id="statsBtn" role="menuitem" type="button" title="Charts and numbers for the whole cellar">Stats</button>
-          <button id="importBtn" role="menuitem" type="button" title="Export your cellar, or import a CSV">Import / export</button>
-          <button id="placesBtn" role="menuitem" type="button" title="Fridges, cellars and other places where your bottles are kept" hidden>Storage places</button>
-        </div>
-      </div>
     </div>
     <input type="file" id="file" accept=".csv,text/csv" hidden>
   </header>
@@ -377,8 +413,6 @@ details.more .charts{margin-top:12px}
     <div class="card"><div class="kl">Paid vs worth now</div><div class="kv" id="k-paid"></div><div class="ks" id="k-paid-s"></div></div>
     <div class="card"><div class="kl">Ready to drink now</div><div class="kv" id="k-ready"></div><div class="ks" id="k-ready-s"></div></div>
   </section>
-
-  <section class="climate" id="climate" aria-label="Cellar climate" hidden></section>
 
   <section class="sec" id="occSec" hidden>
     <h2>Coming up</h2>
@@ -412,7 +446,10 @@ details.more .charts{margin-top:12px}
         <button class="btn" id="filtBtn" type="button" aria-controls="side">Filters <span class="badge" id="filtN"></span></button>
         <select class="in" id="sort" aria-label="Sort wines"></select>
       </div>
-      <div class="placebar" id="placeBar" role="group" aria-label="Storage places" hidden></div>
+      <div class="pcrow">
+        <div class="placebar" id="placeBar" role="group" aria-label="Storage places" hidden></div>
+        <section class="climate" id="climate" aria-label="Cellar climate" hidden></section>
+      </div>
       <div class="bar" id="bar" role="status"></div>
       <section class="grid" id="grid" aria-label="Wines"></section>
 
@@ -437,6 +474,26 @@ details.more .charts{margin-top:12px}
 
   <div class="tip" id="tip"></div>
 </div>
+<nav class="dock" id="dock" aria-label="Main">
+  <button class="dk on" id="dkCellar" type="button">Cellar</button>
+  <button class="dk" id="dkDrink" type="button" title="Show the wines that are ready to drink now">Drink</button>
+  <button class="dk add" id="addBtn" type="button" aria-label="Add wine" title="Add wine">+</button>
+  <button class="dk" id="dkStats" type="button">Stats</button>
+  <div class="menuwrap">
+    <button class="dk" id="moreBtn" type="button" aria-haspopup="menu" aria-expanded="false">More</button>
+    <div class="menu" id="moreMenu" role="menu" hidden>
+      <button id="tableBtn" role="menuitem" type="button" title="Spreadsheet view to add, change and remove many wines and bottles at once">Edit table</button>
+      <button id="menuBtn" role="menuitem" type="button" title="Restaurant-style wine list">Wine list</button>
+      <button id="pairBtn" role="menuitem" type="button" title="Pick a dish and see which of your bottles go with it">Dinner pairing</button>
+      <button id="settingsBtn" role="menuitem" type="button" title="Country, currency, temperature unit, number and date format, paper size">Settings</button>
+      <button id="climateBtn" role="menuitem" type="button" title="Choose the cellar temperature and humidity sensors and the alarm limits">Cellar climate</button>
+      <button id="labelBtn" role="menuitem" type="button" title="Print barcode labels for your bottles">Bottle labels</button>
+      <button id="statsBtn" role="menuitem" type="button" title="Charts and numbers for the whole cellar">Stats</button>
+      <button id="importBtn" role="menuitem" type="button" title="Export your cellar, or import a CSV">Import / export</button>
+      <button id="placesBtn" role="menuitem" type="button" title="Fridges, cellars and other places where your bottles are kept" hidden>Storage places</button>
+    </div>
+  </div>
+</nav>
 <div class="toast" id="toast" role="status"></div>
 <dialog id="sheet"></dialog>
 <dialog id="menu"></dialog>
@@ -758,6 +815,7 @@ details.more .charts{margin-top:12px}
   }
   function drawBar() {
     var nf = sum(Object.keys(DIM_LABEL), function (k) { return state[k].size; }) + (state.q ? 1 : 0); $('filtN').textContent = nf ? String(nf) : '';
+    var drinkOn = state.status.size === 1 && state.status.has('ready'); $('dkDrink').classList.toggle('on', drinkOn); $('dkCellar').classList.toggle('on', !drinkOn);
     var bar = $('bar'); bar.replaceChildren();
     var cur = sub(stock()), nB = sum(cur, function (r) { return r.qty; });
     bar.appendChild(h('span', { 'class': 'count', text: fmtN(nB) + ' bottles · ' + fmtN(cur.length) + ' wines' }));
@@ -1312,12 +1370,12 @@ details.more .charts{margin-top:12px}
     var box = $('climate'); box.replaceChildren();
     if (!climate || !climate.configured || climate.show === false) { box.hidden = true; return; }
     box.hidden = false;
-    [['temp', '🌡️', 'Temperature'], ['humidity', '💧', 'Humidity']].forEach(function (k) {
+    [['temp', '', 'Temp'], ['humidity', '', 'Humidity']].forEach(function (k) {
       var x = climate[k[0]]; if (!x) return;
       var val = x.value == null ? (x.status === 'offline' ? 'no connection' : 'no reading') : (Math.round(x.value * 10) / 10) + ' ' + x.unit;
       var lim = climate.limits[k[0]];
       box.appendChild(h('button', { type: 'button', 'class': 'cl ' + x.status, title: 'Wanted ' + lim[0] + ' to ' + lim[1] + (x.unit ? ' ' + x.unit : ''), onclick: openClimateSheet },
-        h('span', { text: k[1] }), h('span', { text: k[2] }), h('b', { text: val }), x.status === 'low' ? h('small', { text: 'too low' }) : x.status === 'high' ? h('small', { text: 'too high' }) : null));
+        h('span', { text: k[2] }), h('b', { text: val }), x.status === 'low' ? h('small', { text: 'too low' }) : x.status === 'high' ? h('small', { text: 'too high' }) : null));
     });
   }
   function spark(series, lo, hi) {
@@ -2024,7 +2082,10 @@ details.more .charts{margin-top:12px}
   $('tableBtn').addEventListener('click', openTable);
   $('chartsBox').addEventListener('toggle', render);
   var layout = $('layout');
-  if (window.innerWidth < 900) layout.classList.add('side-off');
+  layout.classList.add('side-off');
+  $('dkCellar').addEventListener('click', function () { if (dlg.open) dlg.close(); Object.keys(DIM_LABEL).forEach(function (k) { state[k].clear(); }); state.q = ''; $('q').value = ''; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
+  $('dkDrink').addEventListener('click', function () { showAll('status', 'ready'); });
+  $('dkStats').addEventListener('click', openStats);
   function toggleSide() { layout.classList.toggle('side-off'); if (!layout.classList.contains('side-off') && window.innerWidth < 900) $('side').scrollIntoView({ block: 'nearest' }); }
   $('filtBtn').addEventListener('click', toggleSide); $('sideHide').addEventListener('click', toggleSide);
   var moreBtn = $('moreBtn'), moreMenu = $('moreMenu');

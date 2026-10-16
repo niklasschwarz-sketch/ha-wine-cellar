@@ -306,6 +306,7 @@ try:
         page.wait_for_selector("#occSec:not([hidden]) .tile")
         check("upcoming birthday shows under Coming up", "In 5 days" in page.locator("#occ").inner_text(), page.locator("#occ").inner_text())
         check("tag filter chip appears", page.locator("#f-tag button:has-text('Gift received')").count() == 1)
+        if not page.locator("#f-tag").is_visible(): page.click("#filtBtn")
         page.click("#f-tag button:has-text('Gift received')")
         page.wait_for_function("() => document.querySelectorAll('button.pic').length === 1")
         check("tag filter narrows the list", True)
