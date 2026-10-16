@@ -1,9 +1,12 @@
 # Changelog
 
+## 0.12.1
+- Wording only: the picture import hint now points to the written zip format (`PICTURE_ZIP_FORMAT.md`). The separate picture finder tool moved to its own project, "Picture Finder for HA Wine Cellar".
+
 ## 0.12.0
 - **Import pictures from a zip:** *More → Import / export → Import pictures from a zip*. A zip of pictures named by wine number (12.jpg), or by CellarTracker number (i123456.jpg), is attached to those wines, with an optional source link. Your own uploaded photos are never replaced.
 - The full copy (JSON) now says which wines already have a picture.
-- New helper for your computer, `tools/picture-finder` in the repository: finds up to 10 candidate pictures per wine through an image-search API, lets you pick or drag in your own, and makes the zip.
+- The zip format is documented in `PICTURE_ZIP_FORMAT.md` in the repository. Pictures can also be matched by CellarTracker number (`i123456.jpg`).
 
 ## 0.11.0
 - **Settings (More → Settings):** pick your country and currency. The country suggests the currency, temperature unit and paper size, and each can still be changed. Also: Celsius or Fahrenheit, number and date format (follow the browser or the country), and A4 or US Letter for printing labels and the wine list.

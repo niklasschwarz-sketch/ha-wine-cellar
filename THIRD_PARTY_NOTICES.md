@@ -15,6 +15,9 @@ Wine Cellar is not affiliated with, endorsed by or sponsored by CellarTracker, V
 
 The Code 128 barcode encoder, the pairing rules and the icon and logo were written for this project. Code 128 is an open standard (ISO/IEC 15417).
 
+## Pictures you add yourself
+Pictures imported from a zip, uploaded or dropped in are yours to provide. The add-on does not check their rights. Only add pictures you may use. See `PICTURE_ZIP_FORMAT.md`.
+
 ## Data the add-on can fetch (only when you use the feature)
 - **Open Food Facts** bottle pictures and product data: pictures are licensed CC BY-SA, data under the ODbL. The add-on stores the picture's source link and credit and shows them under the picture. Pictures you add yourself are yours.
 - **Systembolaget prices** (off by default): read from the community-maintained mirror at github.com/AlexGustafsson/systembolaget-api-data, which republishes Systembolaget's public assortment data. The data belongs to Systembolaget. Check their terms before relying on it beyond personal use.

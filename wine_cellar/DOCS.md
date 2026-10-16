@@ -31,7 +31,7 @@ When you type a producer that is already in your cellar, the form fills in count
 Scan, then "Photograph the label", or use "Read the label" in the picture box. The text is read on your phone or computer; the photo never leaves your home. It finds the producer (if you already have it), vintage, appellation, grape and colour, and lists other lines you can tap into a field. Reading curved labels is not perfect, so always check the fields. The reader is downloaded when the add-on is built; if it is missing, the photo is only saved as the picture. On iPhone and Mac you can also tap a field and choose Scan Text.
 
 ## Pictures
-For many wines at once, use **More → Import / export → Import pictures from a zip** (files named by wine number, for example `12.jpg`). The optional helper in `tools/picture-finder` on GitHub makes such a zip on your own computer.
+For many wines at once, use **More → Import / export → Import pictures from a zip** (files named by wine number, for example `12.jpg`). The zip format is described in `PICTURE_ZIP_FORMAT.md` in the GitHub repository, so you can make your own zip from pictures you have the right to use.
 
 The add-on looks up a picture for each wine in stock on Open Food Facts (free, open database), about one wine every 7 seconds. Only close matches are used, so many wines will have none: tap the bottle on a card to add your own photo. Turn the automatic lookup off with the option `auto_images`.
 
