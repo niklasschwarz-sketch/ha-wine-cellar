@@ -31,7 +31,7 @@ When you type a producer that is already in your cellar, the form fills in count
 Scan, then "Photograph the label", or use "Read the label" in the picture box. The text is read on your phone or computer; the photo never leaves your home. It finds the producer (if you already have it), vintage, appellation, grape and colour, and lists other lines you can tap into a field. Reading curved labels is not perfect, so always check the fields. The reader is downloaded when the add-on is built; if it is missing, the photo is only saved as the picture. On iPhone and Mac you can also tap a field and choose Scan Text.
 
 ## Pictures
-For many wines at once, use **More → Import / export → Import pictures from a zip** (files named by wine number, for example `12.jpg`). The zip format is described in `PICTURE_ZIP_FORMAT.md` in the GitHub repository, so you can make your own zip from pictures you have the right to use.
+For many wines at once, use **More → Import / export → Import pictures from a zip** (files named by wine number, for example `12.jpg`). The zip format is described under "Picture zip format" below, so you can make your own zip from pictures you have the right to use.
 
 The add-on looks up a picture for each wine in stock on Open Food Facts (free, open database), about one wine every 7 seconds. Only close matches are used, so many wines will have none: tap the bottle on a card to add your own photo. Turn the automatic lookup off with the option `auto_images`.
 
@@ -43,6 +43,99 @@ Use **Scan bottle**. A USB/Bluetooth scanner types the number into the box. The 
 
 ## Settings: country, currency and units
 *More → Settings* sets your country, currency, temperature unit (°C or °F), number and date format, and paper size (A4 or US Letter) for printing. Picking a country suggests the rest. If you switch currency you may enter a rate to convert the prices already saved (for example 1 EUR = 1.08 USD), or leave it empty to keep the numbers and change only the symbol. The Systembolaget price check appears only for Sweden.
+
+## Picture zip format
+Wine Cellar can attach many bottle pictures at once: **More → Import / export → Import pictures from a zip**. You can make the zip by hand, with your own script, or with any tool. This page is the full specification.
+
+The app only reads the zip you give it. It does not check where the pictures came from. **Only add pictures you have the right to use**, for example your own photos, pictures with an open licence, or pictures you keep for private use only. The optional `sources.json` file lets you record where each one came from, and the app shows that under the picture.
+
+### 1. What goes in the zip
+
+A flat list of picture files and, optionally, one `sources.json`:
+
+```
+my-pictures.zip
+├── 12.jpg
+├── 48.png
+├── i123456.webp
+├── wc-7.jpg
+└── sources.json        (optional)
+```
+
+Folders inside the zip are allowed (only the file name counts), and macOS `__MACOSX` entries are ignored.
+
+### 2. File names: which wine the picture belongs to
+
+The name before the extension says which wine gets the picture. Use one of three forms:
+
+| Name | Meaning | Where to find the number |
+|---|---|---|
+| `12.jpg` | The wine's number in Wine Cellar | `id` of each wine in **Import / export → Download full copy (JSON)** |
+| `i123456.jpg` | The wine's CellarTracker number (iWine) | The `iWine` column of a CellarTracker CSV export, or of the app's CSV download |
+| `wc-12.jpg` | Same as `12.jpg` (the form the app's CSV uses for wines that have no CellarTracker number) | The `iWine` column of the app's CSV download, where it reads `wc-12` |
+
+Extensions: `.jpg`, `.jpeg`, `.png` or `.webp`, in any letter case.
+
+### 3. The pictures
+
+- JPEG, PNG or WebP. The app checks the file's content, not just its name, and skips anything else.
+- At most **3 MB per picture**. About 1000 pixels on the long side is plenty and keeps the cellar small.
+- At most **600 files** and **200 MB** in total after unpacking, and the zip itself at most **64 MB**.
+- One picture per wine. If a wine appears twice, the later file wins.
+
+### 4. Optional `sources.json`
+
+A JSON object. Each key is the file name **without** the extension, exactly as written in the zip (`"12"`, `"i123456"`, `"wc-7"`):
+
+```json
+{
+  "12":      { "url": "https://example.com/page-with-the-picture", "credit": "Example Wine Shop" },
+  "i123456": { "own": true },
+  "wc-7":    { "credit": "Photo: my sister" }
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `url` | Link shown under the picture ("Picture from …"). Must start with `http://` or `https://`, otherwise it is ignored. |
+| `credit` | Text of that link, up to 120 characters. Default: "Picture found on the web". |
+| `own` | `true` marks the picture as **your own photo**. It is then treated like a photo you took in the app: it is never replaced by pictures found online, and it replaces an older picture. |
+
+### 5. What the import does
+
+For every picture file the app:
+
+1. Skips it if it is not a real JPEG, PNG or WebP, or is over 3 MB (counted as "files skipped").
+2. Finds the wine from the file name. If there is no such wine it is counted as "wines not found".
+3. Leaves the wine alone if it already has a photo you uploaded yourself, unless this picture has `"own": true` in `sources.json` (counted as "of your own photos kept").
+4. Otherwise saves the picture, replacing the old one, together with its source link and credit.
+
+When it finishes, a message at the bottom shows the counts. Nothing else in your cellar is changed, and nothing is deleted.
+
+### 6. Make a zip yourself
+
+Name the pictures by wine number (here with the numbers 12 and 48) and zip them, on macOS or Linux:
+
+```
+zip my-pictures.zip 12.jpg 48.png
+```
+
+With Python, including a `sources.json`:
+
+```python
+import json, zipfile
+
+files = {"12.jpg": "https://example.com/page", "48.png": None}   ## file -> source link (or None)
+with zipfile.ZipFile("my-pictures.zip", "w") as z:
+    sources = {}
+    for name, url in files.items():
+        z.write(name)
+        stem = name.rsplit(".", 1)[0]
+        sources[stem] = {"url": url, "credit": "Example Wine Shop"} if url else {"own": True}
+    z.writestr("sources.json", json.dumps(sources))
+```
+
+#
 
 ## Systembolaget prices
 Once a week the add-on downloads the public mirror of Systembolaget's assortment (github.com/AlexGustafsson/systembolaget-api-data, about 30 MB) and keeps only the wines in a small table. Each of your wines is matched strictly on producer, wine name, vintage and bottle size. Many wines (especially small French producers) are not sold there and will show no price. Prices are in kr; `eur_sek_rate` converts them for "Use as current value". Turn it off with `systembolaget_prices`.
