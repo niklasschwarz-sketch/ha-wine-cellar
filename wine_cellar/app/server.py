@@ -61,6 +61,24 @@ TAG_KINDS = ("gift_received", "gift_given", "special")
 OCCASIONS = ("birthday", "anniversary", "wedding", "christmas", "graduation", "dinner", "other")
 REVIEW_KINDS = ("critic", "community")
 
+COUNTRIES = [
+    ("AR", "Argentina", "ARS", "es-AR"), ("AU", "Australia", "AUD", "en-AU"), ("AT", "Austria", "EUR", "de-AT"), ("BE", "Belgium", "EUR", "nl-BE"),
+    ("BR", "Brazil", "BRL", "pt-BR"), ("CA", "Canada", "CAD", "en-CA"), ("CL", "Chile", "CLP", "es-CL"), ("CN", "China", "CNY", "zh-CN"),
+    ("HR", "Croatia", "EUR", "hr-HR"), ("CZ", "Czechia", "CZK", "cs-CZ"), ("DK", "Denmark", "DKK", "da-DK"), ("EE", "Estonia", "EUR", "et-EE"),
+    ("FI", "Finland", "EUR", "fi-FI"), ("FR", "France", "EUR", "fr-FR"), ("DE", "Germany", "EUR", "de-DE"), ("GR", "Greece", "EUR", "el-GR"),
+    ("HK", "Hong Kong", "HKD", "en-HK"), ("HU", "Hungary", "HUF", "hu-HU"), ("IS", "Iceland", "ISK", "is-IS"), ("IN", "India", "INR", "en-IN"),
+    ("IE", "Ireland", "EUR", "en-IE"), ("IL", "Israel", "ILS", "he-IL"), ("IT", "Italy", "EUR", "it-IT"), ("JP", "Japan", "JPY", "ja-JP"),
+    ("LV", "Latvia", "EUR", "lv-LV"), ("LT", "Lithuania", "EUR", "lt-LT"), ("LU", "Luxembourg", "EUR", "fr-LU"), ("MX", "Mexico", "MXN", "es-MX"),
+    ("NL", "Netherlands", "EUR", "nl-NL"), ("NZ", "New Zealand", "NZD", "en-NZ"), ("NO", "Norway", "NOK", "nb-NO"), ("PL", "Poland", "PLN", "pl-PL"),
+    ("PT", "Portugal", "EUR", "pt-PT"), ("RO", "Romania", "RON", "ro-RO"), ("SG", "Singapore", "SGD", "en-SG"), ("SK", "Slovakia", "EUR", "sk-SK"),
+    ("SI", "Slovenia", "EUR", "sl-SI"), ("ZA", "South Africa", "ZAR", "en-ZA"), ("KR", "South Korea", "KRW", "ko-KR"), ("ES", "Spain", "EUR", "es-ES"),
+    ("SE", "Sweden", "SEK", "sv-SE"), ("CH", "Switzerland", "CHF", "de-CH"), ("TW", "Taiwan", "TWD", "zh-TW"), ("TH", "Thailand", "THB", "th-TH"),
+    ("TR", "Turkey", "TRY", "tr-TR"), ("AE", "United Arab Emirates", "AED", "en-AE"), ("GB", "United Kingdom", "GBP", "en-GB"),
+    ("US", "United States", "USD", "en-US"), ("UY", "Uruguay", "UYU", "es-UY"),
+]
+CURRENCIES = sorted({c[2] for c in COUNTRIES})
+COUNTRY_CODES = {c[0] for c in COUNTRIES}
+
 COLORS = ("Red", "White", "Rosé")
 STYLES = ("Dry", "Off-dry", "Sparkling", "Sweet")
 
@@ -966,6 +984,85 @@ def delete_review(rid):
     return {"deleted": rid}
 
 
+# ---------------------------------------------------------------- app settings (country, currency, units)
+def app_settings():
+    d = {"country": "", "currency": "EUR", "tempUnit": "C", "formats": "auto", "paper": "A4", "sekRate": EUR_SEK}
+    try:
+        saved = json.loads(meta_get("app_settings") or "null")
+    except ValueError:
+        saved = None
+    if isinstance(saved, dict):
+        d.update({k: v for k, v in saved.items() if k in d})
+    return d, isinstance(saved, dict)
+
+
+def settings_json():
+    d, saved = app_settings()
+    return dict(d, saved=saved, countries=[{"code": c[0], "name": c[1], "currency": c[2], "locale": c[3]} for c in COUNTRIES], currencies=CURRENCIES)
+
+
+def _c_to_f(v):
+    return round(v * 9.0 / 5.0 + 32.0, 1)
+
+
+def _f_to_c(v):
+    return round((v - 32.0) * 5.0 / 9.0, 1)
+
+
+def save_app_settings(data):
+    cur, _ = app_settings()
+    new = dict(cur)
+    if "country" in data:
+        v = txt(data.get("country"), 2).upper()
+        if v and v not in COUNTRY_CODES:
+            raise ApiError(400, "Unknown country")
+        new["country"] = v
+    if "currency" in data:
+        v = txt(data.get("currency"), 3).upper()
+        if v not in CURRENCIES:
+            raise ApiError(400, "Unknown currency")
+        new["currency"] = v
+    if "tempUnit" in data:
+        if data.get("tempUnit") not in ("C", "F"):
+            raise ApiError(400, "Temperature unit must be C or F")
+        new["tempUnit"] = data["tempUnit"]
+    if "formats" in data:
+        if data.get("formats") not in ("auto", "country"):
+            raise ApiError(400, "Number and date format must be auto or country")
+        new["formats"] = data["formats"]
+    if "paper" in data:
+        if data.get("paper") not in ("A4", "Letter"):
+            raise ApiError(400, "Paper must be A4 or Letter")
+        new["paper"] = data["paper"]
+    if "sekRate" in data:
+        v = num(data.get("sekRate"), None)
+        if v is None or v <= 0 or v > 100000:
+            raise ApiError(400, "The exchange rate to SEK must be a positive number")
+        new["sekRate"] = v
+    converted = 0
+    if new["currency"] != cur["currency"] and data.get("convertRate") not in (None, ""):
+        rate = num(data.get("convertRate"), None)
+        if rate is None or rate <= 0 or rate > 1000000:
+            raise ApiError(400, "The conversion rate must be a positive number")
+        rows = db.run("SELECT id, price, value FROM wc_wines", fetch="all")
+        for r in rows:
+            db.run("UPDATE wc_wines SET price = ?, value = ?, currency = ?, updated_at = ? WHERE id = ?",
+                   (round((r["price"] or 0) * rate, 2), round((r["value"] or 0) * rate, 2), new["currency"], now(), r["id"]))
+        converted = len(rows)
+    elif new["currency"] != cur["currency"]:
+        db.run("UPDATE wc_wines SET currency = ?", (new["currency"],))
+    if new["tempUnit"] != cur["tempUnit"]:
+        cs = climate_settings()
+        f = _c_to_f if new["tempUnit"] == "F" else _f_to_c
+        cs["tempMin"], cs["tempMax"] = f(cs["tempMin"]), f(cs["tempMax"])
+        meta_set("climate_settings", json.dumps(cs))
+        _climate_cache.update(t=0, v=None)
+    meta_set("app_settings", json.dumps(new))
+    out = settings_json()
+    out["converted"] = converted
+    return out
+
+
 # ---------------------------------------------------------------- cellar climate (from Home Assistant)
 _climate_cache = {"t": 0, "v": None}
 ENTITY_RE = re.compile(r"^[a-z_]+\.[a-z0-9_]+$")
@@ -1060,14 +1157,28 @@ def list_sensors():
     return out
 
 
-def _reading(entity, lo, hi, start_iso):
+def _unit_converter(unit, want):
+    u = (unit or "").replace("\u00b0", "").strip().upper()
+    if want == "F" and u == "C":
+        return _c_to_f
+    if want == "C" and u == "F":
+        return _f_to_c
+    return None
+
+
+def _reading(entity, lo, hi, start_iso, want=None):
     out = {"entity": entity, "value": None, "unit": "", "status": "unavailable", "min24": None, "max24": None, "series": []}
+    st = None
     try:
         st = _ha_get("/states/" + quote(entity, safe="._"))
         out["unit"] = (st.get("attributes") or {}).get("unit_of_measurement", "")
         out["name"] = (st.get("attributes") or {}).get("friendly_name", entity)
         v = float(st.get("state"))
-        out["value"] = v
+        conv = _unit_converter(out["unit"], want)
+        if conv:
+            v = conv(v)
+            out["unit"] = "\u00b0" + want
+        out["value"] = round(v, 1) if conv else v
         out["status"] = "low" if v < lo else ("high" if v > hi else "ok")
     except (ValueError, TypeError, KeyError):
         pass
@@ -1082,6 +1193,9 @@ def _reading(entity, lo, hi, start_iso):
                 pts.append(float(p.get("state")))
             except (ValueError, TypeError):
                 continue
+        conv2 = _unit_converter((st.get("attributes") or {}).get("unit_of_measurement", ""), want) if st else None
+        if conv2:
+            pts = [conv2(x) for x in pts]
         if pts:
             out["min24"], out["max24"] = min(pts), max(pts)
             step = max(1, len(pts) // 48)
@@ -1100,7 +1214,7 @@ def climate(force=False):
     start = (datetime.now(timezone.utc) - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S+00:00")
     res = {"configured": True, "show": cs["show"], "settings": cs, "limits": {"temp": [cs["tempMin"], cs["tempMax"]], "humidity": [cs["humidityMin"], cs["humidityMax"]]}, "temp": None, "humidity": None}
     if cs["tempEntity"]:
-        res["temp"] = _reading(cs["tempEntity"], cs["tempMin"], cs["tempMax"], start)
+        res["temp"] = _reading(cs["tempEntity"], cs["tempMin"], cs["tempMax"], start, app_settings()[0]["tempUnit"])
     if cs["humidityEntity"]:
         res["humidity"] = _reading(cs["humidityEntity"], cs["humidityMin"], cs["humidityMax"], start)
     _climate_cache.update(t=time.time(), v=res)
@@ -1653,7 +1767,8 @@ def price_worker():
 
 def app_config():
     n = db.run("SELECT COUNT(*) AS n FROM wc_sb", fetch="one")["n"]
-    return {"eurSek": EUR_SEK, "autoPrices": AUTO_PRICES, "sbProducts": n, "sbUpdated": meta_get("sb_refreshed")}
+    st, saved = app_settings()
+    return {"eurSek": st["sekRate"], "settings": st, "settingsSaved": saved, "autoPrices": AUTO_PRICES, "sbProducts": n, "sbUpdated": meta_get("sb_refreshed")}
 
 
 # ---------------------------------------------------------------- http
@@ -1762,6 +1877,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, delete_tag(int(parts[1])))
         if len(parts) == 2 and parts[0] == "reviews" and parts[1].isdigit() and method == "DELETE":
             return self._send(200, delete_review(int(parts[1])))
+        if parts == ["settings"]:
+            if method == "GET":
+                return self._send(200, settings_json())
+            if method == "PUT":
+                return self._send(200, save_app_settings(self._json()))
         if parts == ["climate"] and method == "GET":
             return self._send(200, climate())
         if parts == ["climate", "sensors"] and method == "GET":

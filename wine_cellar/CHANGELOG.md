@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.11.0
+- **Settings (More → Settings):** pick your country and currency. The country suggests the currency, temperature unit and paper size, and each can still be changed. Also: Celsius or Fahrenheit, number and date format (follow the browser or the country), and A4 or US Letter for printing labels and the wine list.
+- Money shows in your currency everywhere (stats, wine list, forms, edit table). If you change currency you can enter a rate to convert the prices already saved, or just switch the symbol.
+- Changing the temperature unit converts the cellar climate limits and readings.
+- The Systembolaget price check is shown only when the country is Sweden (or not set), with its own exchange rate to SEK in the settings.
+- A new install with no wines opens Settings first, with a guess from the browser language. Existing cellars keep EUR until you change it.
+
 ## 0.10.0
 - **Cellar climate menu:** *More → Cellar climate* lets you pick the temperature and humidity sensors from a list of what Home Assistant has, set the wanted lowest and highest values, choose whether the readings show at the top of the page, and switch on an alarm. The alarm sends one message to Home Assistant (or a phone notification service you name) when a reading leaves its range, and again only after 6 hours. The climate options are gone from the Configuration tab, since everything is set in the app. Sensors you set up in 0.9.0 keep working until you change them.
 - **Simpler Configuration tab:** the database options are gone. The add-on always uses its built-in database file, which Home Assistant backups include. The Postgres option and the Grafana views are no longer offered.

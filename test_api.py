@@ -347,6 +347,34 @@ try:
     check("a notify service is used when chosen", any(p[0] == "/api/services/notify/mobile_app_phone" for p in POSTED), POSTED)
     call("PUT", "/api/climate/settings", {"notify": False, "notifyService": ""})
 
+    # ---- settings: country, currency, units
+    s, st = call("GET", "/api/settings")
+    check("settings start with defaults and a country list", s == 200 and st["currency"] == "EUR" and st["tempUnit"] == "C" and st["saved"] is False and any(c["code"] == "SE" and c["currency"] == "SEK" for c in st["countries"]), st)
+    check("config carries the settings", call("GET", "/api/config")[1]["settings"]["currency"] == "EUR")
+    check("unknown country is refused", call("PUT", "/api/settings", {"country": "XX"})[0] == 400)
+    check("unknown currency is refused", call("PUT", "/api/settings", {"currency": "ZZZ"})[0] == 400)
+    check("bad paper is refused", call("PUT", "/api/settings", {"paper": "A3"})[0] == 400)
+    check("bad exchange rate is refused", call("PUT", "/api/settings", {"sekRate": "-1"})[0] == 400)
+    before = [w["price"] for w in call("GET", "/api/wines")[1]["wines"]]
+    s, st = call("PUT", "/api/settings", {"country": "US", "currency": "USD", "paper": "Letter", "formats": "country", "convertRate": "2"})
+    after = [w["price"] for w in call("GET", "/api/wines")[1]["wines"]]
+    check("saving settings works and converts amounts", s == 200 and st["currency"] == "USD" and st["paper"] == "Letter" and st["converted"] >= 1 and after == [round(p * 2, 2) for p in before], (st, before, after))
+    check("wines carry the new currency", {w["currency"] for w in call("GET", "/api/wines")[1]["wines"]} == {"USD"})
+    check("settings now count as saved", call("GET", "/api/settings")[1]["saved"] is True)
+    s, st = call("PUT", "/api/settings", {"currency": "SEK"})
+    after2 = [w["price"] for w in call("GET", "/api/wines")[1]["wines"]]
+    check("changing currency without a rate keeps the numbers", s == 200 and after2 == after, (after, after2))
+    call("PUT", "/api/climate/settings", {"tempMin": 10, "tempMax": 16})
+    s, st = call("PUT", "/api/settings", {"tempUnit": "F"})
+    cs = call("GET", "/api/climate/settings")[1]
+    check("temperature limits convert to Fahrenheit", cs["tempMin"] == 50 and cs["tempMax"] == 60.8, cs)
+    c = call("GET", "/api/climate?force=1")[1]
+    check("sensor reading shows in Fahrenheit", c["temp"]["unit"] == "\u00b0F" and abs(c["temp"]["value"] - 56.3) < 0.1 and c["temp"]["status"] == "ok", c["temp"])
+    call("PUT", "/api/settings", {"tempUnit": "C"})
+    cs = call("GET", "/api/climate/settings")[1]
+    check("and back to Celsius", cs["tempMin"] == 10 and cs["tempMax"] == 16, cs)
+    call("PUT", "/api/settings", {"country": "SE", "currency": "EUR", "paper": "A4", "formats": "auto", "sekRate": 11})
+
     # ---- page and unknown paths
     with urllib.request.urlopen(BASE + "/", timeout=5) as r:
         html = r.read().decode()

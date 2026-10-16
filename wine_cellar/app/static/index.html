@@ -126,7 +126,7 @@ dialog::backdrop{background:rgba(0,0,0,.4);backdrop-filter:blur(4px)}
 .dl dd{margin:0;overflow-wrap:anywhere}
 .hist{display:grid;gap:6px;font-size:.9rem}
 .climate{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}
-.climate[hidden]{display:none}
+.climate[hidden],.f[hidden]{display:none}
 .cl{appearance:none;border:0;cursor:pointer;display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;border-radius:999px;background:var(--fill);font:inherit}
 .cl b{font-variant-numeric:tabular-nums}
 .cl small{opacity:.65}
@@ -355,6 +355,7 @@ details.more .charts{margin-top:12px}
           <button id="tableBtn" role="menuitem" type="button" title="Spreadsheet view to add, change and remove many wines and bottles at once">Edit table</button>
           <button id="menuBtn" role="menuitem" type="button" title="Restaurant-style wine list">Wine list</button>
           <button id="pairBtn" role="menuitem" type="button" title="Pick a dish and see which of your bottles go with it">Dinner pairing</button>
+          <button id="settingsBtn" role="menuitem" type="button" title="Country, currency, temperature unit, number and date format, paper size">Settings</button>
           <button id="climateBtn" role="menuitem" type="button" title="Choose the cellar temperature and humidity sensors and the alarm limits">Cellar climate</button>
           <button id="labelBtn" role="menuitem" type="button" title="Print barcode labels for your bottles">Bottle labels</button>
           <button id="statsBtn" role="menuitem" type="button" title="Charts and numbers for the whole cellar">Stats</button>
@@ -477,12 +478,29 @@ details.more .charts{margin-top:12px}
   function grapes(r) { return String(r.varietal || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean); }
   var state = { color: new Set(), style: new Set(), country: new Set(), region: new Set(), vintage: new Set(), status: new Set(), producer: new Set(), varietal: new Set(), appellation: new Set(), tag: new Set(), q: '', sort: 'vintage_new', showEmpty: false };
 
-  var fmtN = function (n) { return Math.round(n).toLocaleString('en'); };
-  var eur0 = new Intl.NumberFormat('en', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
-  var eur1 = new Intl.NumberFormat('en', { style: 'currency', currency: 'EUR', maximumFractionDigits: 1 });
+  var LOC = 'en', CUR = 'EUR';
+  var fmtN = function (n) { return Math.round(n).toLocaleString(LOC); };
+  var eur0, eur1, eur2, sek;
   var pct0 = function (x) { return Math.round(x * 100) + '%'; };
-  var sek = new Intl.NumberFormat('sv-SE', { style: 'currency', currency: 'SEK', maximumFractionDigits: 0 });
-  var cfg = { eurSek: 11, autoPrices: false, sbProducts: 0, sbUpdated: null };
+  var cfg = { eurSek: 11, autoPrices: false, sbProducts: 0, sbUpdated: null, settings: { country: '', currency: 'EUR', tempUnit: 'C', formats: 'auto', paper: 'A4', sekRate: 11 }, settingsSaved: false };
+  var COUNTRY_LIST = null;
+  function browserLocale() { try { return (navigator.languages && navigator.languages[0]) || navigator.language || 'en'; } catch (e) { return 'en'; } }
+  function applyLocale() {
+    var st = cfg.settings || {}, loc = browserLocale();
+    if (st.formats === 'country' && st.country && COUNTRY_LIST) { var c = COUNTRY_LIST.filter(function (x) { return x.code === st.country; })[0]; if (c) loc = c.locale; }
+    try { new Intl.NumberFormat(loc); } catch (e) { loc = 'en'; }
+    LOC = loc; CUR = st.currency || 'EUR';
+    var money = function (a, b) { return new Intl.NumberFormat(LOC, { style: 'currency', currency: CUR, minimumFractionDigits: a, maximumFractionDigits: b }); };
+    eur0 = money(0, 0); eur1 = money(0, 1); eur2 = money(2, 2);
+    sek = new Intl.NumberFormat('sv-SE', { style: 'currency', currency: 'SEK', maximumFractionDigits: 0 });
+    document.documentElement.setAttribute('lang', LOC.split('-')[0]);
+    var ps = document.getElementById('pageSize'); if (!ps) { ps = document.createElement('style'); ps.id = 'pageSize'; document.head.appendChild(ps); }
+    ps.textContent = '@media print{@page{size:' + (st.paper === 'Letter' ? 'letter' : 'A4') + ';margin:16mm}}';
+  }
+  function curSym() { try { var p = new Intl.NumberFormat(LOC, { style: 'currency', currency: CUR, currencyDisplay: 'narrowSymbol' }).formatToParts(0).filter(function (x) { return x.type === 'currency'; })[0]; return p ? p.value : CUR; } catch (e) { return CUR; } }
+  function sbOn() { var c = (cfg.settings || {}).country; return !c || c === 'SE'; }
+  function dloc() { return LOC; }
+  applyLocale();
   var sum = function (a, f) { var s = 0; for (var i = 0; i < a.length; i++) s += f(a[i]); return s; };
 
   var cv = document.createElement('canvas').getContext('2d');
@@ -858,7 +876,7 @@ details.more .charts{margin-top:12px}
       add(joinParts('sm', grapeLinks(r).concat([r.style !== 'Dry' ? r.style : '', r.location ? 'Shelf: ' + r.location : ''])));
       b.appendChild(windowBar(r));
       b.appendChild(valueLine(r));
-      if (r.sb && r.sb.status === 'ok') add(joinParts('sm', ['Systembolaget ' + sek.format(r.sb.price)]));
+      if (sbOn() && r.sb && r.sb.status === 'ok') add(joinParts('sm', ['Systembolaget ' + sek.format(r.sb.price)]));
       var acts = h('div', { 'class': 'acts' });
       if (r.qty) acts.appendChild(h('button', { type: 'button', 'class': 'btn primary', text: 'Open one', 'aria-label': 'Open one bottle of ' + r.producer + ' ' + r.vint, onclick: function () { openDrinkSheet(r); } }));
       acts.appendChild(h('button', { type: 'button', 'class': 'btn', text: '+1', 'aria-label': 'Add one bottle of ' + r.producer + ' ' + r.vint, onclick: function () { quick(r, 1); } }));
@@ -874,7 +892,7 @@ details.more .charts{margin-top:12px}
     if (!checkins.length) { host.appendChild(h('p', { 'class': 'empty', text: 'Nothing yet. Opening or adding a bottle shows up here.' })); return; }
     checkins.slice(0, 8).forEach(function (c) {
       var k = KIND[c.kind] || ['•', c.kind], d = new Date(c.ts);
-      var when = isNaN(d) ? '' : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      var when = isNaN(d) ? '' : d.toLocaleDateString(dloc(), { day: 'numeric', month: 'short' }) + ' ' + d.toLocaleTimeString(dloc(), { hour: '2-digit', minute: '2-digit' });
       var detail = k[1] + (c.delta ? ' ' + Math.abs(c.delta) + (Math.abs(c.delta) === 1 ? ' bottle' : ' bottles') : '') + (c.rating ? ' · ' + '★'.repeat(Math.floor(c.rating)) + (c.rating % 1 ? '½' : '') : '') + (c.note ? ' · ' + c.note : '');
       host.appendChild(h('div', { 'class': 'act' }, h('span', { 'class': 'ic', text: k[0] }), h('div', { 'class': 'tx' }, h('b', { text: c.label || 'Wine' }), h('div', { 'class': 'sm', text: detail })), h('span', { 'class': 'sm', text: when })));
     });
@@ -958,10 +976,10 @@ details.more .charts{margin-top:12px}
     row('Bottles', r.qty ? fmtN(r.qty) : 'Finished');
     row('Price paid', r.price ? eur1.format(r.price) + ' per bottle' : '');
     row('Value', r.val ? eur1.format(r.val) + ' per bottle' : '');
-    if (r.sb && r.sb.status === 'ok') {
+    if (!sbOn()) { /* Swedish retail price only shown for Sweden */ } else if (r.sb && r.sb.status === 'ok') {
       row('Systembolaget', sek.format(r.sb.price) + ' · ' + r.sb.name + ' (nr ' + r.sb.number + ')');
       if (r.price > 0) { var paidSek = r.price * cfg.eurSek, dd = (r.sb.price - paidSek) / paidSek; row('Paid vs Systembolaget', eur1.format(r.price) + ' paid ≈ ' + sek.format(paidSek) + ', now ' + sek.format(r.sb.price) + ' (' + (dd >= 0 ? '+' : '') + Math.round(dd * 100) + '%)'); }
-    } else if (r.sb) row('Systembolaget', 'Not in their range, or no close match');
+    } else if (sbOn() && r.sb) row('Systembolaget', 'Not in their range, or no close match');
     row('Drinking window', windowText(r));
     row('Shelf', r.location);
     row('In a rack', rackText(r));
@@ -974,8 +992,8 @@ details.more .charts{margin-top:12px}
       api('POST', 'api/wines/' + r.id + '/sb').then(function (w) { setWine(w); render(); openInfoSheet(rows.find(function (x) { return x.id === r.id; }) || r); })
         .catch(function (e) { sbMsg.textContent = e.message; sbCheck.disabled = false; sbCheck.textContent = 'Check the Systembolaget price'; });
     } });
-    sbBtns.appendChild(sbCheck);
-    if (r.sb && r.sb.status === 'ok') {
+    if (sbOn()) sbBtns.appendChild(sbCheck);
+    if (sbOn() && r.sb && r.sb.status === 'ok') {
       var eurNow = Math.round(r.sb.price / cfg.eurSek * 100) / 100;
       sbBtns.appendChild(h('button', { type: 'button', 'class': 'btn', text: 'Use as current value (≈ ' + eur1.format(eurNow) + ')', onclick: function () {
         api('PATCH', 'api/wines/' + r.id, { value: eurNow }).then(function (w) { setWine(w); render(); toast('Value set to ' + eur1.format(eurNow)); openInfoSheet(rows.find(function (x) { return x.id === r.id; }) || r); }).catch(function (e) { sbMsg.textContent = e.message; });
@@ -1007,7 +1025,7 @@ details.more .charts{margin-top:12px}
       if (!d.checkins.length) { hist.appendChild(h('span', { 'class': 'note', text: 'Nothing logged for this wine yet.' })); return; }
       d.checkins.forEach(function (c) {
         var k = KIND[c.kind] || ['•', c.kind], dt = new Date(c.ts);
-        var when = isNaN(dt) ? '' : dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+        var when = isNaN(dt) ? '' : dt.toLocaleDateString(dloc(), { day: 'numeric', month: 'short', year: 'numeric' });
         var txt = k[1] + (c.delta ? ' ' + Math.abs(c.delta) : '') + (c.rating ? ' · ' + '★'.repeat(Math.floor(c.rating)) + (c.rating % 1 ? '½' : '') : '') + (c.note ? ' · ' + c.note : '');
         hist.appendChild(h('div', {}, h('span', { 'class': 'note', text: when + '  ' }), txt));
       });
@@ -1151,7 +1169,7 @@ details.more .charts{margin-top:12px}
       box.appendChild(links);
       box.appendChild(h('p', { 'class': 'note', text: 'CellarTracker and the critics do not offer their scores for other apps to read, so this list is yours: copy over the scores you care about and they are kept with the wine.' }));
     }
-    function load() { return api('GET', 'api/wines/' + r.id + '/reviews').then(paint).catch(function () { box.replaceChildren(h('span', { 'class': 'note', text: 'Scores and reviews are only available in the installed add-on.' })); }); }
+  function load() { return api('GET', 'api/wines/' + r.id + '/reviews').then(paint).catch(function () { box.replaceChildren(h('span', { 'class': 'note', text: 'Scores and reviews are only available in the installed add-on.' })); }); }
     load();
     return h('div', { 'class': 'f' }, h('div', { 'class': 'lab', text: 'Scores and reviews' }), box, msg);
   }
@@ -1196,6 +1214,57 @@ details.more .charts{margin-top:12px}
     openSheet('Cellar climate', body, [h('button', { type: 'button', 'class': 'btn', text: 'Settings', onclick: openClimateSettings }), h('button', { type: 'button', 'class': 'btn', text: 'Refresh', onclick: function () { loadClimate().then(openClimateSheet); } })]);
   }
 
+  function openSettings(first) {
+    api('GET', 'api/settings').then(function (d) {
+      COUNTRY_LIST = d.countries;
+      var cur = {}; ['country', 'currency', 'tempUnit', 'formats', 'paper', 'sekRate'].forEach(function (k) { cur[k] = d[k]; });
+      if (!d.saved) {
+        var m = /[-_]([A-Za-z]{2})$/.exec(browserLocale()), g = m && d.countries.filter(function (c) { return c.code === m[1].toUpperCase(); })[0];
+        if (g) { cur.country = g.code; cur.currency = g.currency; }
+        if (g && g.code === 'US') { cur.tempUnit = 'F'; cur.paper = 'Letter'; }
+        if (g && ['CA', 'MX'].indexOf(g.code) >= 0) cur.paper = 'Letter';
+      }
+      var msg = h('div', { 'class': 'err' });
+      var sel = function (opts, val, label) { var e = h('select', { 'class': 'in', 'aria-label': label }, opts.map(function (o) { return h('option', { value: o[0], text: o[1] }); })); e.value = val; return e; };
+      var country = sel([['', 'Not set']].concat(d.countries.map(function (c) { return [c.code, c.name]; })), cur.country, 'Country');
+      var currency = sel(d.currencies.map(function (c) { return [c, c]; }), cur.currency, 'Currency');
+      var unit = sel([['C', 'Celsius (°C)'], ['F', 'Fahrenheit (°F)']], cur.tempUnit, 'Temperature unit');
+      var fm = sel([['auto', 'Same as this browser'], ['country', 'Same as the country']], cur.formats, 'Number and date format');
+      var paper = sel([['A4', 'A4'], ['Letter', 'US Letter']], cur.paper, 'Paper size');
+      var rate = h('input', { 'class': 'in', inputmode: 'decimal', value: String(cur.sekRate), 'aria-label': 'Exchange rate to SEK' });
+      var conv = h('input', { 'class': 'in', inputmode: 'decimal', placeholder: 'e.g. 1.08', 'aria-label': 'Conversion rate for existing amounts' });
+      var convBox = h('div', { 'class': 'f', hidden: true, style: 'gap:6px' }, h('div', { 'class': 'lab', text: 'Convert the prices already saved (optional)' }), conv,
+        h('p', { 'class': 'note', id: 'convNote' }));
+      var sekBox = h('div', { 'class': 'f', style: 'gap:6px' }, h('div', { 'class': 'lab', id: 'rateLab' }), rate, h('p', { 'class': 'note', text: 'Only used for the Systembolaget comparison.' }));
+      function sync() {
+        var oldCur = d.currency, changed = currency.value !== oldCur && d.saved || (currency.value !== oldCur && !d.saved && rows.length);
+        convBox.hidden = !changed;
+        convBox.querySelector('.note').textContent = 'Your wines are saved in ' + oldCur + '. Enter how many ' + currency.value + ' one ' + oldCur + ' is worth to convert them, or leave empty to keep the numbers and only change the symbol.';
+        sekBox.hidden = country.value !== 'SE' && country.value !== '';
+        sekBox.querySelector('.lab').textContent = 'Exchange rate: 1 ' + currency.value + ' = ? SEK';
+      }
+      country.addEventListener('change', function () {
+        var c = d.countries.filter(function (x) { return x.code === country.value; })[0];
+        if (c) { currency.value = c.currency; if (c.code === 'US' || c.code === 'CA' || c.code === 'MX') paper.value = 'Letter'; else paper.value = 'A4'; unit.value = c.code === 'US' ? 'F' : 'C'; }
+        sync();
+      });
+      currency.addEventListener('change', sync); sync();
+      var save = h('button', { type: 'button', 'class': 'btn primary', text: 'Save', onclick: function () {
+        msg.textContent = ''; save.disabled = true;
+        var body = { country: country.value, currency: currency.value, tempUnit: unit.value, formats: fm.value, paper: paper.value };
+        if (!sekBox.hidden) body.sekRate = rate.value.replace(',', '.');
+        if (!convBox.hidden && conv.value.trim()) body.convertRate = conv.value.replace(',', '.');
+        api('PUT', 'api/settings', body).then(function (res) {
+          cfg.settings = { country: res.country, currency: res.currency, tempUnit: res.tempUnit, formats: res.formats, paper: res.paper, sekRate: res.sekRate }; cfg.settingsSaved = true; cfg.eurSek = res.sekRate;
+          applyLocale(); return load();
+        }).then(function () { toast('Settings saved'); dlg.close(); }).catch(function (e) { msg.textContent = e.message; save.disabled = false; });
+      } });
+      var fld = function (t, n) { return h('div', { 'class': 'f', style: 'gap:6px' }, h('div', { 'class': 'lab', text: t }), n); };
+      openSheet('Settings', h('div', { 'class': 'f', style: 'gap:14px' },
+        h('p', { 'class': 'note', text: first ? 'Welcome. Choose where you live so prices, dates and units look right. You can change this later under More, Settings.' : 'Choose where you live. Picking a country suggests the currency, units and paper size, and you can still change each one.' }),
+        fld('Country', country), fld('Currency', currency), convBox, sekBox, fld('Temperature unit', unit), fld('Numbers and dates', fm), fld('Paper size for printing', paper), msg), [save]);
+    }).catch(function (e) { toast(e.message); });
+  }
   function openClimateSettings() {
     var cur = (climate && climate.settings) || { tempEntity: '', humidityEntity: '', tempMin: 10, tempMax: 16, humidityMin: 60, humidityMax: 75, show: true, notify: false, notifyService: '' };
     var msg = h('div', { 'class': 'err' }), note = h('div', { 'class': 'note' });
@@ -1246,7 +1315,7 @@ details.more .charts{margin-top:12px}
     openSheet('Cellar climate', h('div', { 'class': 'f', style: 'gap:14px' },
       h('p', { 'class': 'note', text: 'Pick the sensors in your cellar. The page shows their readings and marks them orange outside the wanted range. Leave a sensor on None to hide it.' }),
       tf.node, hf.node,
-      h('div', { 'class': 'f' }, h('div', { 'class': 'lab', text: 'Wanted temperature (lowest, highest)' }), two(tMin, tMax)),
+      h('div', { 'class': 'f' }, h('div', { 'class': 'lab', text: 'Wanted temperature in °' + ((cfg.settings || {}).tempUnit || 'C') + ' (lowest, highest)' }), two(tMin, tMax)),
       h('div', { 'class': 'f' }, h('div', { 'class': 'lab', text: 'Wanted humidity in % (lowest, highest)' }), two(hMin, hMax)),
       h('label', { 'class': 'note' }, show, ' Show the readings at the top of the page'),
       h('label', { 'class': 'note' }, notify, ' Send me an alarm in Home Assistant when a reading is outside its range (once, then again after 6 hours)'),
@@ -1405,8 +1474,8 @@ details.more .charts{margin-top:12px}
     function qtyVal() { var n = parseInt(qtyIn.value, 10); return isNaN(n) ? 1 : Math.max(1, Math.min(999, n)); }
     var stepper = h('div', { 'class': 'step' }, h('button', { type: 'button', 'class': 'btn', text: '−', 'aria-label': 'Fewer bottles', onclick: function () { qtyIn.value = Math.max(1, qtyVal() - 1); } }), qtyIn,
       h('button', { type: 'button', 'class': 'btn', text: '+', 'aria-label': 'More bottles', onclick: function () { qtyIn.value = Math.min(999, qtyVal() + 1); } }));
-    var PR = inp('price', adding ? 'Price you paid per bottle (€)' : 'Price per bottle (€)', { type: 'text', inputmode: 'decimal', value: raw && raw.price ? String(raw.price) : '' });
-    var VA = inp('value', 'Current value (€)', { type: 'text', inputmode: 'decimal', value: raw && raw.value ? String(raw.value) : '', placeholder: 'Same as price if empty' });
+    var PR = inp('price', adding ? 'Price you paid per bottle (' + curSym() + ')' : 'Price per bottle (' + curSym() + ')', { type: 'text', inputmode: 'decimal', value: raw && raw.price ? String(raw.price) : '' });
+    var VA = inp('value', 'Current value (' + curSym() + ')', { type: 'text', inputmode: 'decimal', value: raw && raw.value ? String(raw.value) : '', placeholder: 'Same as price if empty' });
     var B = inp('begin', 'Drink from (year)', { type: 'number', inputmode: 'numeric', value: raw && raw.begin ? raw.begin : '' }), E = inp('end', 'Drink until (year)', { type: 'number', inputmode: 'numeric', value: raw && raw.end ? raw.end : '' });
     var L = inp('location', 'Shelf / location', { value: raw ? raw.location : '', maxlength: 100, placeholder: 'e.g. Rack B, shelf 2' });
     var EAN = inp('ean', 'Barcode (EAN)', { type: 'text', inputmode: 'numeric', value: raw && raw.ean ? raw.ean : (pre.ean || ''), maxlength: 20, placeholder: 'Optional' });
@@ -1544,7 +1613,7 @@ details.more .charts{margin-top:12px}
         // same wine and year: update the details you changed, then add the bottles
         var patch = { price: data.price, value: data.value, begin: data.begin, end: data.end, location: data.location, ean: data.ean };
         p = api('PATCH', 'api/wines/' + ex.id, patch).then(function () {
-          return api('POST', 'api/wines/' + ex.id + '/adjust', { delta: n, kind: 'add', note: price ? 'Bought at €' + String(price).replace(',', '.') + ' per bottle' : null });
+          return api('POST', 'api/wines/' + ex.id + '/adjust', { delta: n, kind: 'add', note: price ? 'Bought at ' + curSym() + String(price).replace(',', '.') + ' per bottle' : null });
         });
       } else {
         data.quantity = n;
@@ -1740,9 +1809,8 @@ details.more .charts{margin-top:12px}
       if (menuOpt.group === 'Region') return r.country;
       return r.region !== 'Unknown' ? r.region : (menuOpt.group === 'Style' ? r.country : '');
     }
-    var eur2 = new Intl.NumberFormat('en', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
     function price(r) {
-      if (menuOpt.src === 'Systembolaget' && r.sb && r.sb.status === 'ok') return sek.format(r.sb.price);
+      if (sbOn() && menuOpt.src === 'Systembolaget' && r.sb && r.sb.status === 'ok') return sek.format(r.sb.price);
       var v = r.val || r.price; return v ? (v % 1 ? eur2 : eur0).format(v) : '';
     }
     function draw() {
@@ -1772,7 +1840,7 @@ details.more .charts{margin-top:12px}
         doc.appendChild(sec);
       });
       if (!list.length) doc.appendChild(h('p', { 'class': 'mfoot', text: 'No wines in the current selection.' }));
-      else if (menuOpt.prices) doc.appendChild(h('p', { 'class': 'mfoot', text: menuOpt.src === 'Systembolaget' ? 'Prices are per bottle: Systembolaget\'s price in kr where listed, otherwise the estimated value in €.' : 'Prices are per bottle.' }));
+      else if (menuOpt.prices) doc.appendChild(h('p', { 'class': 'mfoot', text: sbOn() && menuOpt.src === 'Systembolaget' ? 'Prices are per bottle: Systembolaget\'s price in kr where listed, otherwise the estimated value.' : 'Prices are per bottle.' }));
       info.textContent = fmtN(list.length) + (list.length === 1 ? ' wine' : ' wines') + ' from your current filters';
     }
     var printBtn = h('button', { type: 'button', 'class': 'btn primary', text: 'Print', onclick: function () {
@@ -1781,7 +1849,7 @@ details.more .charts{margin-top:12px}
       window.addEventListener('afterprint', done); setTimeout(function () { window.print(); }, 50);
     } });
     mdlg.replaceChildren(h('div', { 'class': 'mwrap' },
-      h('div', { 'class': 'mbar' }, h('b', { text: 'Wine list' }), seg1, priceBtn, srcSeg, info, h('span', { style: 'flex:1' }), printBtn, h('button', { type: 'button', 'class': 'btn ghost sm', text: 'Close', onclick: function () { mdlg.close(); } })),
+      h('div', { 'class': 'mbar' }, h('b', { text: 'Wine list' }), seg1, priceBtn, sbOn() ? srcSeg : null, info, h('span', { style: 'flex:1' }), printBtn, h('button', { type: 'button', 'class': 'btn ghost sm', text: 'Close', onclick: function () { mdlg.close(); } })),
       h('div', { 'class': 'mscroll' }, doc)));
     draw();
     if (!mdlg.open) mdlg.showModal();
@@ -1802,6 +1870,7 @@ details.more .charts{margin-top:12px}
   $('statsBtn').addEventListener('click', openStats);
   $('labelBtn').addEventListener('click', function () { openLabelSheet(); });
   $('climateBtn').addEventListener('click', function () { openClimateSettings(); });
+  $('settingsBtn').addEventListener('click', function () { openSettings(); });
   $('pairBtn').addEventListener('click', function () { openPairSheet(); });
   $('tableBtn').addEventListener('click', openTable);
   $('chartsBox').addEventListener('toggle', render);
@@ -2157,7 +2226,7 @@ details.more .charts{margin-top:12px}
     /* price bands */
     var bands = [['Under 10', 0, 10], ['10 to 20', 10, 20], ['20 to 35', 20, 35], ['35 to 60', 35, 60], ['60 to 100', 60, 100], ['100 and up', 100, 1e9]];
     var priced = list.filter(function (r) { return r.val > 0; });
-    grid.appendChild(card('By value per bottle', m[0] + ' in each price band (€). ' + (list.length - priced.length ? fmtN(list.length - priced.length) + ' wines have no value set.' : ''),
+    grid.appendChild(card('By value per bottle', m[0] + ' in each price band (' + curSym() + '). ' + (list.length - priced.length ? fmtN(list.length - priced.length) + ' wines have no value set.' : ''),
       barList(bands.map(function (b) { return { label: b[0], n: sum(priced.filter(function (r) { return r.val >= b[1] && r.val < b[2]; }), val) }; }), fmt, '#ff9f0a')));
     /* gainers and losers */
     var gl = list.filter(function (r) { return r.price > 0 && r.val > 0; }).map(function (r) { return { r: r, d: (r.val - r.price) * r.qty, pc: (r.val - r.price) / r.price }; }).filter(function (x) { return Math.abs(x.d) >= 0.5; }).sort(function (a, b) { return b.d - a.d; });
@@ -2170,7 +2239,7 @@ details.more .charts{margin-top:12px}
     if (!sdlg.open) sdlg.showModal();
     api('GET', 'api/checkins?limit=500').then(function (d) {
       var now = new Date(), months = [];
-      for (var i = 11; i >= 0; i--) { var dt = new Date(now.getFullYear(), now.getMonth() - i, 1); months.push({ key: dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0'), label: dt.toLocaleDateString('en-GB', { month: 'short' }), n: 0 }); }
+      for (var i = 11; i >= 0; i--) { var dt = new Date(now.getFullYear(), now.getMonth() - i, 1); months.push({ key: dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0'), label: dt.toLocaleDateString(dloc(), { month: 'short' }), n: 0 }); }
       var rs = [], total = 0;
       d.checkins.forEach(function (c) {
         if (c.kind !== 'drink') return; var dt = new Date(c.ts); if (isNaN(dt)) return;
@@ -2196,15 +2265,15 @@ details.more .charts{margin-top:12px}
     { k: 'appellation', label: 'Appellation', w: '11rem', list: 'dl-appellation' },
     { k: 'varietal', label: 'Grape', w: '11rem', list: 'dl-varietal' },
     { k: 'qty', label: 'Bottles', w: '7.6rem', qty: true, num: true },
-    { k: 'price', label: 'Paid €', w: '5.6rem', num: true },
-    { k: 'val', label: 'Value €', w: '5.6rem', num: true },
+    { k: 'price', get label() { return 'Paid ' + curSym(); }, w: '5.6rem', num: true },
+    { k: 'val', get label() { return 'Value ' + curSym(); }, w: '5.6rem', num: true },
     { k: 'b', label: 'Drink from', w: '5.6rem', num: true },
     { k: 'e', label: 'Drink to', w: '5.6rem', num: true },
     { k: 'location', label: 'Shelf', w: '8rem' }
   ];
   var TKEYS = TCOLS.map(function (c) { return c.k; });
   function plain(n) { return String(Math.round(n * 100) / 100); }
-  function parseNum(s) { var t = String(s == null ? '' : s).replace(/[€\s]/g, '').replace(',', '.'); if (t === '') return 0; var n = Number(t); return isFinite(n) ? n : NaN; }
+  function parseNum(s) { var t = String(s == null ? '' : s).replace(/[^0-9.,\-]/g, '').replace(',', '.'); if (t === '') return 0; var n = Number(t); return isFinite(n) ? n : NaN; }
   function wineNameOf(w) { var n = String(w.wine || '').trim(); if (w.producer && n.indexOf(w.producer) === 0) n = n.slice(w.producer.length).trim(); return n; }
   function cellsFromWine(r) {
     var w = r.raw;
@@ -2478,7 +2547,8 @@ details.more .charts{margin-top:12px}
           if ((m = path.match(/^api\/wines\/(\d+)$/)) && method === 'DELETE') { var z = find(+m[1]); ws = ws.filter(function (q) { return q !== z; }); log.unshift({ id: cid++, wineId: null, label: z.vintage + ' ' + z.wine, kind: 'delete', delta: -z.quantity, rating: null, note: 'Wine deleted from the cellar', ts: new Date().toISOString() }); return resolve({ deleted: z.id }); }
           if ((m = path.match(/^api\/ean\/(\d+)$/)) && method === 'GET') return resolve({ ean: m[1], mine: ws.filter(function (q) { return q.ean === m[1]; }).map(function (q) { return Object.assign({}, q); }), product: null, offline: true });
           if (/^api\/wines\/\d+\/image/.test(path)) throw new Error('Pictures work in the installed add-on, not in this preview.');
-          if (path === 'api/config') return resolve({ eurSek: 11, autoPrices: false, sbProducts: 0, sbUpdated: null });
+          if (path === 'api/config') return resolve({ eurSek: 11, autoPrices: false, sbProducts: 0, sbUpdated: null, settings: cfg.settings, settingsSaved: true });
+          if (path === 'api/settings') return resolve(method === 'PUT' ? Object.assign({}, cfg.settings, body, { saved: true, countries: [], currencies: ['EUR','USD','SEK'] }) : { country: '', currency: 'EUR', tempUnit: 'C', formats: 'auto', paper: 'A4', sekRate: 11, saved: false, countries: [{ code: 'SE', name: 'Sweden', currency: 'SEK', locale: 'sv-SE' }, { code: 'US', name: 'United States', currency: 'USD', locale: 'en-US' }], currencies: ['EUR','SEK','USD'] });
           if (/^api\/wines\/\d+\/sb$/.test(path)) throw new Error('Systembolaget prices work in the installed add-on, not in this preview.');
           if (path.indexOf('api/checkins') === 0) { var wm = path.match(/wine=(\d+)/); return resolve({ checkins: log.filter(function (c) { return !wm || c.wineId === +wm[1]; }).slice(0, 30) }); }
           if (path === 'api/racks' && method === 'GET') return resolve({ racks: [], bottles: [] });
@@ -2491,8 +2561,9 @@ details.more .charts{margin-top:12px}
   }
 
   /* ---------- start ---------- */
+  var loaded = false;
   function load() {
-    return api('GET', 'api/config').then(function (c) { cfg = c; }).catch(function () {}).then(function () { return api('GET', 'api/wines'); }).then(function (d) { rows = d.wines.map(norm); return loadCheckins(); }).then(loadRacks).then(loadTags).then(render).then(loadClimate).then(function () { setInterval(loadClimate, 300000); });
+    return api('GET', 'api/settings').then(function (d) { COUNTRY_LIST = d.countries; }).catch(function () {}).then(function () { return api('GET', 'api/config'); }).then(function (c) { cfg = c; applyLocale(); }).catch(function () {}).then(function () { return api('GET', 'api/wines'); }).then(function (d) { rows = d.wines.map(norm); return loadCheckins(); }).then(loadRacks).then(loadTags).then(render).then(loadClimate).then(function () { if (!loaded) { loaded = true; setInterval(loadClimate, 300000); if (!cfg.settingsSaved && !rows.length) openSettings(true); } });
   }
   fetch(base + 'api/health').then(function (r) { return r.ok ? r.json() : Promise.reject(); }).then(function (j) { if (!j || !j.ok) throw 0; })
     .catch(function () { demoMode = true; demoApi = makeDemo(); var d = $('demo'); d.style.display = 'block'; d.textContent = 'Preview with sample wines. Changes here are not saved. Install the add-on to use your own cellar.'; })

@@ -36,6 +36,9 @@ Use **Scan bottle**. A USB/Bluetooth scanner types the number into the box. The 
 ## Wine list
 **Wine list** shows a menu-style list of your current selection (filters apply). Print it from there.
 
+## Settings: country, currency and units
+*More → Settings* sets your country, currency, temperature unit (°C or °F), number and date format, and paper size (A4 or US Letter) for printing. Picking a country suggests the rest. If you switch currency you may enter a rate to convert the prices already saved (for example 1 EUR = 1.08 USD), or leave it empty to keep the numbers and change only the symbol. The Systembolaget price check appears only for Sweden.
+
 ## Systembolaget prices
 Once a week the add-on downloads the public mirror of Systembolaget's assortment (github.com/AlexGustafsson/systembolaget-api-data, about 30 MB) and keeps only the wines in a small table. Each of your wines is matched strictly on producer, wine name, vintage and bottle size. Many wines (especially small French producers) are not sold there and will show no price. Prices are in kr; `eur_sek_rate` converts them for "Use as current value". Turn it off with `systembolaget_prices`.
 
