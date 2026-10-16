@@ -398,6 +398,44 @@ try:
         page.keyboard.press("Escape")
         api("PUT", "/api/settings", {"country": "SE", "currency": "EUR"})
 
+        # ---- storage places
+        api("PUT", "/api/settings", {"places": True, "shelfNotes": True})
+        fr = [x for x in api("POST", "/api/places", {"name": "Fridge 1", "tempEntity": "sensor.t2"})["places"] if x["name"] == "Fridge 1"][0]
+        cl = [x for x in api("POST", "/api/places", {"name": "Cellar left"})["places"] if x["name"] == "Cellar left"][0]
+        two = [w for w in api("GET", "/api/wines")["wines"] if w["quantity"] >= 2 and not w["stock"]][0]
+        api("POST", "/api/wines/%d/move" % two["id"], {"from": None, "to": fr["id"], "qty": 1})
+        api("POST", "/api/wines/%d/move" % two["id"], {"from": None, "to": cl["id"], "qty": 1, "note": "shelf 3"})
+        page.reload()
+        page.wait_for_selector("#k-value")
+        page.wait_for_selector("#placeBar .chip")
+        check("a row of place chips appears above the list", page.locator("#placeBar .chip").count() >= 3, page.locator("#placeBar").inner_text())
+        card = page.locator("article.wine", has_text=two["producer"]).first
+        check("the wine card shows where its bottles are", "Fridge 1 ×1" in card.inner_text() and "Cellar left ×1" in card.inner_text(), card.inner_text())
+        page.click("#placeBar .chip:has-text('Fridge 1')")
+        total = page.locator("article.wine").count()
+        check("tapping a place shows only wines kept there", 1 <= total < len(api("GET", "/api/wines")["wines"]) and page.locator("article.wine", has_text=two["producer"]).count() >= 1, total)
+        page.locator("article.wine", has_text=two["producer"]).first.locator("button:has-text('Open one')").click()
+        page.wait_for_selector("dialog[open] .radio")
+        check("opening a bottle that is in several places asks which one", page.locator("dialog[open] .radio").count() >= 2)
+        page.locator("dialog[open] .radio", has_text="Cellar left").click()
+        page.click("dialog[open] button:has-text('Log it')")
+        page.wait_for_function("() => !document.querySelector('dialog[open]')")
+        after = [w for w in api("GET", "/api/wines")["wines"] if w["id"] == two["id"]][0]
+        check("the bottle came from the chosen place", after["quantity"] == two["quantity"] - 1 and [x["qty"] for x in after["stock"] if x["placeId"] == cl["id"]] == [] and [x["qty"] for x in after["stock"] if x["placeId"] == fr["id"]] == [1], after["stock"])
+        page.click("#moreBtn")
+        page.click("#placesBtn")
+        page.wait_for_selector("dialog[open] .pl-row")
+        rowtxt = page.locator("dialog[open] .pl-row", has_text="Fridge 1").inner_text()
+        check("the places list shows bottles and the place's own temperature", "1 bottle" in rowtxt and "9" in rowtxt, rowtxt)
+        page.click("dialog[open] .pl-row:has-text('Cellar left') button:has-text('Edit')")
+        page.wait_for_selector("dialog[open] input[aria-label='Place name']")
+        page.fill("dialog[open] input[aria-label='Place name']", "Cellar right")
+        page.click("dialog[open] button:has-text('Save')")
+        page.wait_for_selector("dialog[open] .pl-row:has-text('Cellar right')")
+        check("a place can be renamed", api("GET", "/api/places")["places"][1]["name"] == "Cellar right")
+        page.keyboard.press("Escape")
+        api("PUT", "/api/settings", {"places": False})
+
         check("no script errors", errors == [], errors)
         browser.close()
 finally:

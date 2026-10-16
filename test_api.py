@@ -162,18 +162,68 @@ try:
     s, c = call("GET", "/api/config")
     check("config endpoint", s == 200, c)
 
-    # ---- racks
-    s, st = call("GET", "/api/racks")
-    check("racks start empty", s == 200 and st == {"racks": [], "bottles": []}, st)
-    s, st = call("POST", "/api/racks", {"name": "Cellar A", "shelves": 3, "slots": 4})
-    check("create rack", s == 201 and len(st["racks"]) == 1, st)
-    rk = st["racks"][0]["id"]
-    s, st = call("POST", "/api/bottles/place", {"wineId": wid, "rackId": rk, "shelf": 1, "slot": 1})
-    check("place a bottle", s == 200 and len(st["bottles"]) == 1, st)
-    s, e = call("POST", "/api/bottles/place", {"wineId": wid, "rackId": rk, "shelf": 1, "slot": 2})
-    check("cannot place more bottles than owned", s == 409, e)
-    s, e = call("POST", "/api/bottles/place", {"wineId": wid, "rackId": rk, "shelf": 9, "slot": 1})
-    check("outside the rack is refused", s == 400, e)
+    # ---- storage places
+    s, st = call("GET", "/api/places")
+    check("places start switched off and empty", s == 200 and st["enabled"] is False and st["places"] == [] and st["unplaced"] == 1, st)
+    s, st = call("PUT", "/api/settings", {"places": True, "shelfNotes": True})
+    check("switching places on turns each shelf text into a place", s == 200 and st["places"] is True and st["placesMade"] == 1, st)
+    s, st = call("GET", "/api/places")
+    shelf2 = st["places"][0]
+    check("the old shelf text became a place with its bottles", len(st["places"]) == 1 and shelf2["name"] == "Shelf 2" and shelf2["bottles"] == 1 and st["unplaced"] == 0, st)
+    check("the wine lists where its bottle is", wines()[0]["stock"] == [{"placeId": shelf2["id"], "qty": 1, "note": ""}], wines()[0]["stock"])
+    s, st = call("POST", "/api/places", {"name": "Fridge 1"})
+    fr = [p for p in st["places"] if p["name"] == "Fridge 1"][0]
+    check("create a place, type guessed from the name", s == 201 and fr["kind"] == "fridge", st)
+    s, e = call("POST", "/api/places", {"name": " fridge 1 "})
+    check("place names are unique", s == 409, e)
+    s, e = call("POST", "/api/places", {"name": "Bar", "tempEntity": "not a sensor"})
+    check("a bad sensor name is refused", s == 400, e)
+    s, st = call("POST", "/api/places", {"name": "Bar", "kind": "bar", "tempEntity": "sensor.test_temp"})
+    bar = [p for p in st["places"] if p["name"] == "Bar"][0]
+    check("a place can have its own sensor", bar["tempEntity"] == "sensor.test_temp", bar)
+    s, st = call("PUT", "/api/places/order", {"ids": [bar["id"], fr["id"], shelf2["id"]]})
+    check("places can be reordered", [p["name"] for p in st["places"]] == ["Bar", "Fridge 1", "Shelf 2"], st)
+
+    s, w = call("POST", "/api/wines", {"producer": "Spread Estate", "wine": "Split", "vintage": 2020, "color": "Red", "quantity": 3, "placeId": shelf2["id"], "placeNote": "top"})
+    sp = w["id"]
+    check("a new wine can start in a place", s == 201 and w["stock"] == [{"placeId": shelf2["id"], "qty": 3, "note": "top"}], w)
+    s, w = call("POST", "/api/wines/%d/move" % sp, {"from": shelf2["id"], "to": fr["id"], "qty": 2, "note": "door"})
+    check("move bottles between places", s == 200 and {x["placeId"]: x["qty"] for x in w["stock"]} == {shelf2["id"]: 1, fr["id"]: 2} and w["quantity"] == 3, w)
+    s, e = call("POST", "/api/wines/%d/move" % sp, {"from": shelf2["id"], "to": fr["id"], "qty": 5})
+    check("cannot move more bottles than are there", s == 409, e)
+    s, e = call("POST", "/api/wines/%d/move" % sp, {"from": fr["id"], "to": fr["id"], "qty": 1})
+    check("moving to the same place is refused", s == 400, e)
+    s, w = call("POST", "/api/wines/%d/move" % sp, {"from": fr["id"], "to": None, "qty": 1})
+    check("bottles can be taken out of a place without a new one", s == 200 and sum(x["qty"] for x in w["stock"]) == 2 and w["quantity"] == 3, w)
+    s, w = call("POST", "/api/wines/%d/move" % sp, {"from": None, "to": bar["id"], "qty": 1})
+    check("bottles without a place can be put in one", s == 200 and sum(x["qty"] for x in w["stock"]) == 3, w)
+    s, w = call("PUT", "/api/wines/%d/stock/%d" % (sp, bar["id"]), {"note": "left side"})
+    check("shelf note can be changed", s == 200 and [x["note"] for x in w["stock"] if x["placeId"] == bar["id"]] == ["left side"], w)
+    s, w = call("POST", "/api/wines/%d/adjust" % sp, {"delta": -1, "kind": "drink", "placeId": fr["id"]})
+    check("drinking a bottle takes it from the chosen place", s == 200 and w["quantity"] == 2 and {x["placeId"]: x["qty"] for x in w["stock"]} == {shelf2["id"]: 1, bar["id"]: 1}, w)
+    s, e = call("POST", "/api/wines/%d/adjust" % sp, {"delta": -1, "kind": "drink", "placeId": fr["id"]})
+    check("cannot drink from a place that has none", s == 409, e)
+    s, w = call("POST", "/api/wines/%d/adjust" % sp, {"delta": 2, "kind": "add", "placeId": fr["id"]})
+    check("adding bottles puts them in the chosen place", s == 200 and w["quantity"] == 4 and {x["placeId"]: x["qty"] for x in w["stock"]}[fr["id"]] == 2, w)
+    s, w = call("POST", "/api/wines/%d/adjust" % sp, {"delta": -1, "kind": "remove"})
+    check("without a place the count still never passes the places", s == 200 and sum(x["qty"] for x in w["stock"]) <= w["quantity"] == 3, w)
+    s, e = call("DELETE", "/api/places/%d" % fr["id"], {})
+    check("a place with bottles cannot be deleted without saying where they go", s == 409, e)
+    with urllib.request.urlopen(BASE + "/api/export.csv", timeout=10) as r:
+        pcsv = r.read()
+    prow = [x for x in csv.DictReader(io.StringIO(pcsv.decode("utf-8-sig"))) if x["Wine"] == "Split"]
+    check("export has one row per place, with the shelf note as Bin", len(prow) >= 2 and sum(int(x["Quantity"]) for x in prow) == 3 and {x["Location"] for x in prow} <= {"Shelf 2", "Fridge 1", "Bar", ""}, prow)
+    s, ri = call("POST", "/api/import", raw=pcsv)
+    sp_w = [x for x in wines() if x["id"] == sp][0]
+    check("importing that file again keeps the bottle counts and places", s == 200 and ri["inserted"] == 0 and sp_w["quantity"] == 3 and sum(x["qty"] for x in sp_w["stock"]) == 3, (ri, sp_w))
+    s, st = call("DELETE", "/api/places/%d" % bar["id"], {"moveTo": shelf2["id"]})
+    sp_w = [x for x in wines() if x["id"] == sp][0]
+    check("deleting a place moves its bottles where you choose", s == 200 and not any(p["id"] == bar["id"] for p in st["places"]) and sp_w["quantity"] == 3 and sum(x["qty"] for x in sp_w["stock"]) == 3, (st, sp_w))
+    s, st = call("DELETE", "/api/places/%d" % fr["id"], {"moveTo": "unplaced"})
+    sp_w = [x for x in wines() if x["id"] == sp][0]
+    check("or leaves them without a place", s == 200 and sp_w["quantity"] == 3 and sum(x["qty"] for x in sp_w["stock"]) == 2, sp_w)
+    s, d = call("DELETE", "/api/wines/%d" % sp)
+    check("the test wine is removed again", s == 200)
 
     # ---- export and import
     s, w2 = call("POST", "/api/wines", {"producer": "Export, \"Quote\" Test", "wine": "Export Test", "vintage": "NV", "color": "White", "quantity": 2,
@@ -190,24 +240,24 @@ try:
     check("re-importing our own export adds nothing", s == 200 and ri["inserted"] == 0 and len(wines()) == len(rows), ri)
     with urllib.request.urlopen(BASE + "/api/backup.json", timeout=10) as r:
         bk = json.loads(r.read().decode())
-    check("backup json", bk["app"] == "wine-cellar" and len(bk["wines"]) == len(rows) and len(bk["racks"]["bottles"]) == 1, list(bk))
+    check("backup json", bk["app"] == "wine-cellar" and len(bk["wines"]) == len(rows) and bool(bk["places"]) and bool(bk["wines"][0]["stock"]), list(bk))
 
     # ---- restart: everything must still be there
     before = {w["id"]: (w["producer"], w["quantity"]) for w in wines()}
-    placed = len(call("GET", "/api/racks")[1]["bottles"])
+    placed = len(call("GET", "/api/places")[1]["places"])
     stop()
     start()
     after = {w["id"]: (w["producer"], w["quantity"]) for w in wines()}
     check("wines survive a restart", before == after and len(after) == 2, (before, after))
-    check("rack placements survive a restart", len(call("GET", "/api/racks")[1]["bottles"]) == placed == 1)
+    check("places survive a restart", len(call("GET", "/api/places")[1]["places"]) == placed >= 1)
     s, c = call("GET", "/api/checkins?limit=50")
     check("history survives a restart", len(c["checkins"]) >= 4, len(c["checkins"]))
 
     # ---- stats views (used by Grafana when Postgres is chosen)
     con = sqlite3.connect(DB)
-    names = ("wc_v_cellar", "wc_v_by_region", "wc_v_by_vintage", "wc_v_by_type", "wc_v_drunk_by_month", "wc_v_rack_contents")
+    names = ("wc_v_cellar", "wc_v_by_region", "wc_v_by_vintage", "wc_v_by_type", "wc_v_drunk_by_month", "wc_v_place_contents")
     counts = {n: con.execute("SELECT COUNT(*) FROM " + n).fetchone()[0] for n in names}
-    check("views exist and have rows", counts["wc_v_cellar"] == 2 and counts["wc_v_by_region"] >= 1 and counts["wc_v_drunk_by_month"] == 1 and counts["wc_v_rack_contents"] == 1, counts)
+    check("views exist and have rows", counts["wc_v_cellar"] == 2 and counts["wc_v_by_region"] >= 1 and counts["wc_v_drunk_by_month"] == 1 and counts["wc_v_place_contents"] >= 1, counts)
     tot = con.execute("SELECT SUM(bottles) FROM wc_v_by_region").fetchone()[0]
     check("region view adds up to the bottle count", tot == sum(w["quantity"] for w in wines()), tot)
     con.close()
@@ -215,7 +265,9 @@ try:
     # ---- delete
     s, d = call("DELETE", "/api/wines/%d" % wid)
     check("delete wine", s == 200 and not any(w["id"] == wid for w in wines()), d)
-    check("deleting a wine clears its placements", call("GET", "/api/racks")[1]["bottles"] == [])
+    con = sqlite3.connect(DB)
+    check("deleting a wine clears its places", con.execute("SELECT COUNT(*) FROM wc_stock WHERE wine_id = ?", (wid,)).fetchone()[0] == 0)
+    con.close()
     s, e = call("DELETE", "/api/wines/99999")
     check("unknown wine 404", s == 404, e)
 
@@ -349,7 +401,7 @@ try:
 
     # ---- settings: country, currency, units
     s, st = call("GET", "/api/settings")
-    check("settings start with defaults and a country list", s == 200 and st["currency"] == "EUR" and st["tempUnit"] == "C" and st["saved"] is False and any(c["code"] == "SE" and c["currency"] == "SEK" for c in st["countries"]), st)
+    check("settings start with defaults and a country list", s == 200 and st["currency"] == "EUR" and st["tempUnit"] == "C" and any(c["code"] == "SE" and c["currency"] == "SEK" for c in st["countries"]), st)
     check("config carries the settings", call("GET", "/api/config")[1]["settings"]["currency"] == "EUR")
     check("unknown country is refused", call("PUT", "/api/settings", {"country": "XX"})[0] == 400)
     check("unknown currency is refused", call("PUT", "/api/settings", {"currency": "ZZZ"})[0] == 400)
@@ -413,7 +465,7 @@ try:
     # ---- page and unknown paths
     with urllib.request.urlopen(BASE + "/", timeout=5) as r:
         html = r.read().decode()
-    check("page is served", "Cellar" in html and "racksBtn" in html and r.status == 200)
+    check("page is served", "Cellar" in html and "Cellar" in html and r.status == 200)
     check("unknown api path is 404", call("GET", "/api/nope")[0] == 404)
 finally:
     stop()

@@ -167,23 +167,23 @@ SCHEMA = [
         price DOUBLE PRECISION,
         ts TS_TYPE
     )""",
-    """CREATE TABLE IF NOT EXISTS wc_racks (
+    """CREATE TABLE IF NOT EXISTS wc_places (
         id BIGSERIAL PRIMARY KEY,
         name TEXT NOT NULL,
-        shelves INTEGER NOT NULL,
-        slots INTEGER NOT NULL,
-        pos INTEGER NOT NULL DEFAULT 0
+        kind TEXT NOT NULL DEFAULT 'cellar',
+        pos INTEGER NOT NULL DEFAULT 0,
+        temp_entity TEXT,
+        hum_entity TEXT
     )""",
-    """CREATE TABLE IF NOT EXISTS wc_bottles (
+    """CREATE TABLE IF NOT EXISTS wc_stock (
         id BIGSERIAL PRIMARY KEY,
         wine_id BIGINT NOT NULL,
-        rack_id BIGINT NOT NULL,
-        shelf INTEGER NOT NULL,
-        slot INTEGER NOT NULL,
-        placed_at TS_TYPE
+        place_id BIGINT NOT NULL,
+        qty INTEGER NOT NULL,
+        note TEXT
     )""",
-    "CREATE UNIQUE INDEX IF NOT EXISTS wc_bottles_pos ON wc_bottles (rack_id, shelf, slot)",
-    "CREATE INDEX IF NOT EXISTS wc_bottles_wine ON wc_bottles (wine_id)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS wc_stock_pos ON wc_stock (wine_id, place_id)",
+    "CREATE INDEX IF NOT EXISTS wc_stock_place ON wc_stock (place_id)",
     """CREATE TABLE IF NOT EXISTS wc_tags (
         id BIGSERIAL PRIMARY KEY,
         wine_id BIGINT NOT NULL,
@@ -300,7 +300,19 @@ class DB:
             if "duplicate" not in str(e).lower():
                 raise
         self.run("CREATE INDEX IF NOT EXISTS wc_wines_ean ON wc_wines (ean)")
+        self.drop_old_racks()
         make_views()
+
+    def drop_old_racks(self):
+        """The rack screen of earlier versions was never switched on. Remove its tables when they hold nothing."""
+        try:
+            self.run("DROP VIEW IF EXISTS wc_v_rack_contents")
+            n = self.run("SELECT COUNT(*) AS n FROM wc_bottles", fetch="one")["n"]
+            if not n:
+                self.run("DROP TABLE IF EXISTS wc_bottles")
+                self.run("DROP TABLE IF EXISTS wc_racks")
+        except Exception:
+            pass
 
 
 db = DB()
@@ -339,7 +351,9 @@ def iso(v):
     return v
 
 
-def wine_json(r):
+def wine_json(r, stock=None):
+    if stock is None:
+        stock = stock_of(r["id"])
     return {
         "id": r["id"],
         "iwine": r.get("iwine"),
@@ -365,6 +379,7 @@ def wine_json(r):
         "likePercent": r.get("like_percent"),
         "likeVotes": r.get("like_votes") or 0,
         "location": r.get("location") or "",
+        "stock": stock,
         "notes": r.get("notes") or "",
         "ean": r.get("ean") or "",
         "updated": iso(r.get("updated_at")),
@@ -480,7 +495,8 @@ WINE_SELECT = (
 
 def list_wines():
     rows = db.run(WINE_SELECT + " ORDER BY w.id", fetch="all")
-    return [wine_json(r) for r in rows]
+    sm = stock_map()
+    return [wine_json(r, sm.get(r["id"], [])) for r in rows]
 
 
 def wine_pairing(wid):
@@ -495,8 +511,9 @@ def pairing_find(dish):
     if found is None:
         raise ApiError(404, "Unknown dish")
     byid = {r["id"]: r for r in rows}
+    sm = stock_map()
     for f in found:
-        f["wine"] = wine_json(byid[f["id"]])
+        f["wine"] = wine_json(byid[f["id"]], sm.get(f["id"], []))
     return {"dish": dish, "wines": found}
 
 
@@ -525,9 +542,12 @@ def create_wine(data):
     if not cols.get("wine"):
         cols["wine"] = cols["producer"]
     cols.setdefault("currency", "EUR")
+    place = _place_arg(data.get("placeId")) if cols["quantity"] > 0 else None
     wid = insert_wine(cols)
     if cols["quantity"] > 0:
         add_checkin(wid, label_of(cols), "add", cols["quantity"], None, "Added to the cellar")
+        if place:
+            _stock_add(wid, place, cols["quantity"], txt(data.get("placeNote"), 100))
     if data.get("fetchPicture") and cols.get("ean") and AUTO_IMAGES:
         attach_ean_picture(wid, cols["ean"])
     wake.set()
@@ -576,19 +596,22 @@ def adjust_wine(wid, data):
     if rating is not None and kind != "drink":
         raise ApiError(400, "Only opened bottles can be rated")
     note = txt(data.get("note"), 1000) or None
+    place = _place_arg(data.get("placeId"))
     newq = (r["quantity"] or 0) + delta
     if newq < 0:
         raise ApiError(409, "There are not that many bottles left")
+    if place is not None and delta < 0:
+        row = _stock_row(wid, place)
+        if not row or row["qty"] < -delta:
+            raise ApiError(409, "There are not that many bottles in " + get_place(place)["name"])
     # Conditional update keeps the count correct if two taps race.
     db.run("UPDATE wc_wines SET quantity = ?, updated_at = ? WHERE id = ? AND quantity = ?", (newq, now(), wid, r["quantity"] or 0))
     cur = get_wine(wid)
     if (cur["quantity"] or 0) != newq:
         raise ApiError(409, "The cellar changed, please try again")
     add_checkin(wid, label_of(r), kind, delta, rating, note)
-    if delta < 0:
-        prefer = data.get("bottleId")
-        trim_bottles(wid, newq, int(prefer) if str(prefer or "").isdigit() else None)
-    return wine_json(cur)
+    stock_after_adjust(wid, delta, place, newq)
+    return wine_json(get_wine(wid))
 
 
 def delete_wine(wid):
@@ -597,7 +620,7 @@ def delete_wine(wid):
     db.run("UPDATE wc_checkins SET wine_id = NULL WHERE wine_id = ?", (wid,))
     db.run("DELETE FROM wc_images WHERE wine_id = ?", (wid,))
     db.run("DELETE FROM wc_prices WHERE wine_id = ?", (wid,))
-    db.run("DELETE FROM wc_bottles WHERE wine_id = ?", (wid,))
+    db.run("DELETE FROM wc_stock WHERE wine_id = ?", (wid,))
     db.run("DELETE FROM wc_tags WHERE wine_id = ?", (wid,))
     db.run("DELETE FROM wc_reviews WHERE wine_id = ?", (wid,))
     db.run("DELETE FROM wc_wines WHERE id = ?", (wid,))
@@ -635,12 +658,20 @@ def import_csv(raw):
     if not reader.fieldnames or not need.issubset(set(reader.fieldnames)):
         raise ApiError(400, "This does not look like a CellarTracker export (missing columns: " + ", ".join(sorted(need - set(reader.fieldnames or []))) + ")")
     inserted = updated = skipped = 0
+    # One wine can be listed on several rows (one per place, as the export writes it). Those rows add up.
+    groups = {}
     for r in reader:
         iw = txt(r.get("iWine"), 40)
         color = r.get("Color") or "Red"
         if not iw or color not in COLORS or not txt(r.get("Producer"), 200):
             skipped += 1
             continue
+        groups.setdefault(iw, []).append(r)
+    use_places = places_on()
+    pcache = {}
+    for iw, rows_ in groups.items():
+        r = rows_[0]
+        color = r.get("Color") or "Red"
         try:
             v = int(r.get("Vintage") or 0)
         except ValueError:
@@ -658,19 +689,21 @@ def import_csv(raw):
             lv = int(r.get("LikeVotes") or 0)
         except ValueError:
             lv = 0
+        qty_total = sum(max(0, int(num(x.get("Quantity")))) for x in rows_)
         cols = {
             "color": color, "type": txt(r.get("Type"), 60) or color, "vintage": None if v in (0, 1001) else v,
             "producer": txt(r.get("Producer"), 200), "wine": txt(r.get("Wine"), 300), "varietal": txt(r.get("Varietal"), 200),
             "designation": txt(r.get("Designation")), "vineyard": txt(r.get("Vineyard")), "country": txt(r.get("Country")),
             "region": txt(r.get("Region")), "subregion": txt(r.get("SubRegion")), "appellation": txt(r.get("Appellation")),
             "size": txt(r.get("Size"), 40), "currency": txt(r.get("Currency"), 8) or "EUR",
-            "value": num(r.get("Value")), "price": num(r.get("Price")), "quantity": max(0, int(num(r.get("Quantity")))),
+            "value": num(r.get("Value")), "price": num(r.get("Price")), "quantity": qty_total,
             "begin_consume": yr(b), "end_consume": yr(e), "like_percent": lp, "like_votes": lv,
         }
         # Our own export carries these; a plain CellarTracker file does not, and must not wipe them.
         for col, key in (("Location", "location"), ("Notes", "notes")):
-            if (r.get(col) or "").strip():
-                cols[key] = txt(r.get(col), 1000)
+            first = next((x.get(col) for x in rows_ if (x.get(col) or "").strip()), "")
+            if first.strip():
+                cols[key] = txt(first, 1000)
         ean = re.sub(r"\D", "", r.get("EAN") or "")
         if 8 <= len(ean) <= 14:
             cols["ean"] = ean
@@ -681,17 +714,34 @@ def import_csv(raw):
             cols["updated_at"] = now()
             names = list(cols)
             db.run("UPDATE wc_wines SET " + ", ".join(n + " = ?" for n in names) + " WHERE id = ?", [cols[n] for n in names] + [ex["id"]])
+            wid = ex["id"]
             updated += 1
         else:
             cols["iwine"] = iw
-            insert_wine(cols)
+            wid = insert_wine(cols)
             inserted += 1
+        if use_places:
+            where = {}
+            for x in rows_:
+                loc = txt(x.get("Location"), 60)
+                if loc:
+                    k = (place_for_import(loc, pcache), txt(x.get("Bin"), 100))
+                    where[k] = where.get(k, 0) + max(0, int(num(x.get("Quantity"))))
+            if where:  # the file says where the bottles are: it replaces what is stored for this wine
+                db.run("DELETE FROM wc_stock WHERE wine_id = ?", (wid,))
+                for (pid, bin_), n in where.items():
+                    if n > 0:
+                        _stock_add(wid, pid, n, bin_)
+            normalize_stock(wid)
     total = db.run("SELECT COALESCE(SUM(quantity), 0) AS q, COUNT(*) AS n FROM wc_wines", fetch="one")
     wake.set()
     return {"inserted": inserted, "updated": updated, "skipped": skipped, "wines": total["n"], "bottles": int(total["q"])}
 
 
-# ---------------------------------------------------------------- racks
+# ---------------------------------------------------------------- storage places (fridges, cellars, bar ...)
+PLACE_KINDS = ("cellar", "fridge", "bar", "other")
+
+
 def clean_int(v, lo, hi, label):
     try:
         n = int(v)
@@ -702,179 +752,321 @@ def clean_int(v, lo, hi, label):
     return n
 
 
-def racks_state():
-    racks = db.run("SELECT id, name, shelves, slots FROM wc_racks ORDER BY pos, id", fetch="all")
-    bottles = db.run("SELECT id, wine_id, rack_id, shelf, slot FROM wc_bottles ORDER BY id", fetch="all")
-    return {
-        "racks": [{"id": r["id"], "name": r["name"], "shelves": r["shelves"], "slots": r["slots"]} for r in racks],
-        "bottles": [{"id": b["id"], "wineId": b["wine_id"], "rackId": b["rack_id"], "shelf": b["shelf"], "slot": b["slot"]} for b in bottles],
-    }
+def guess_kind(name):
+    n = (name or "").lower()
+    if "fridge" in n or "kyl" in n or "cooler" in n:
+        return "fridge"
+    if n.startswith("bar") or " bar" in n:
+        return "bar"
+    if "cellar" in n or "källare" in n or "kallare" in n:
+        return "cellar"
+    return "other"
 
 
-def get_rack(rid):
-    r = db.run("SELECT * FROM wc_racks WHERE id = ?", (rid,), fetch="one")
-    if not r:
-        raise ApiError(404, "Rack not found")
-    return r
+def places_on():
+    return bool(app_settings()[0].get("places"))
 
 
-def create_rack(data):
-    name = txt(data.get("name"), 60)
-    if not name:
-        raise ApiError(400, "Give the rack a name")
-    shelves = clean_int(data.get("shelves"), 1, 40, "Shelves")
-    slots = clean_int(data.get("slots"), 1, 60, "Bottles per shelf")
-    with db.lock:
-        n = db.run("SELECT COALESCE(MAX(pos), 0) AS m FROM wc_racks", fetch="one")["m"]
-        db.run("INSERT INTO wc_racks (name, shelves, slots, pos) VALUES (?, ?, ?, ?)", (name, shelves, slots, n + 1))
-    return racks_state()
-
-
-def update_rack(rid, data):
-    r = get_rack(rid)
-    name = txt(data.get("name"), 60) if "name" in data else r["name"]
-    if not name:
-        raise ApiError(400, "Give the rack a name")
-    shelves = clean_int(data.get("shelves", r["shelves"]), 1, 40, "Shelves")
-    slots = clean_int(data.get("slots", r["slots"]), 1, 60, "Bottles per shelf")
-    with db.lock:
-        out = db.run("SELECT COUNT(*) AS n FROM wc_bottles WHERE rack_id = ? AND (shelf > ? OR slot > ?)", (rid, shelves, slots), fetch="one")["n"]
-        if out:
-            raise ApiError(409, "%d bottle%s sit outside the smaller size. Move them first." % (out, "" if out == 1 else "s"))
-        db.run("UPDATE wc_racks SET name = ?, shelves = ?, slots = ? WHERE id = ?", (name, shelves, slots, rid))
-    return racks_state()
-
-
-def delete_rack(rid):
-    get_rack(rid)
-    with db.lock:
-        db.run("DELETE FROM wc_bottles WHERE rack_id = ?", (rid,))
-        db.run("DELETE FROM wc_racks WHERE id = ?", (rid,))
-    return racks_state()
-
-
-def clear_rack(rid):
-    get_rack(rid)
-    db.run("DELETE FROM wc_bottles WHERE rack_id = ?", (rid,))
-    return racks_state()
-
-
-def get_bottle(bid):
-    b = db.run("SELECT * FROM wc_bottles WHERE id = ?", (bid,), fetch="one")
-    if not b:
-        raise ApiError(404, "That bottle is no longer in a rack")
-    return b
-
-
-def place_bottle(data):
-    rid = clean_int(data.get("rackId"), 1, 10 ** 12, "Rack")
-    rack = get_rack(rid)
-    shelf = clean_int(data.get("shelf"), 1, rack["shelves"], "Shelf")
-    slot = clean_int(data.get("slot"), 1, rack["slots"], "Slot")
-    with db.lock:
-        occ = db.run("SELECT * FROM wc_bottles WHERE rack_id = ? AND shelf = ? AND slot = ?", (rid, shelf, slot), fetch="one")
-        if str(data.get("bottleId") or "").isdigit():  # move (or swap) a bottle that is already in a rack
-            b = get_bottle(int(data["bottleId"]))
-            if occ and occ["id"] == b["id"]:
-                return racks_state()
-            if occ:  # swap through a parking position, the slot index is unique
-                db.run("UPDATE wc_bottles SET shelf = 0, slot = ? WHERE id = ?", (-b["id"], b["id"]))
-                db.run("UPDATE wc_bottles SET rack_id = ?, shelf = ?, slot = ? WHERE id = ?", (b["rack_id"], b["shelf"], b["slot"], occ["id"]))
-            db.run("UPDATE wc_bottles SET rack_id = ?, shelf = ?, slot = ? WHERE id = ?", (rid, shelf, slot, b["id"]))
-            return racks_state()
-        wid = clean_int(data.get("wineId"), 1, 10 ** 12, "Wine")
-        w = get_wine(wid)
-        placed = db.run("SELECT COUNT(*) AS n FROM wc_bottles WHERE wine_id = ?", (wid,), fetch="one")["n"]
-        if placed >= (w["quantity"] or 0):
-            raise ApiError(409, "All bottles of this wine are already in a rack")
-        if occ:
-            raise ApiError(409, "That slot is taken")
-        db.run("INSERT INTO wc_bottles (wine_id, rack_id, shelf, slot, placed_at) VALUES (?, ?, ?, ?, ?)", (wid, rid, shelf, slot, now()))
-    return racks_state()
-
-
-def unplace_bottle(bid):
-    get_bottle(bid)
-    db.run("DELETE FROM wc_bottles WHERE id = ?", (bid,))
-    return racks_state()
-
-
-def trim_bottles(wid, qty, prefer=None):
-    """Keep placed bottles <= bottle count. A bottle that was just opened is removed first."""
-    with db.lock:
-        if prefer:
-            b = db.run("SELECT id FROM wc_bottles WHERE id = ? AND wine_id = ?", (prefer, wid), fetch="one")
-            if b:
-                db.run("DELETE FROM wc_bottles WHERE id = ?", (b["id"],))
-        rows = db.run("SELECT id FROM wc_bottles WHERE wine_id = ? ORDER BY id", (wid,), fetch="all")
-        for r in rows[max(qty, 0):]:
-            db.run("DELETE FROM wc_bottles WHERE id = ?", (r["id"],))
-
-
-def fill_rack(rid, data):
-    """Put unplaced bottles into the free slots of a rack, row by row."""
-    rack = get_rack(rid)
-    only = data.get("wineId")
-    with db.lock:
-        taken = {(b["shelf"], b["slot"]) for b in db.run("SELECT shelf, slot FROM wc_bottles WHERE rack_id = ?", (rid,), fetch="all")}
-        free = [(sh, sl) for sh in range(1, rack["shelves"] + 1) for sl in range(1, rack["slots"] + 1) if (sh, sl) not in taken]
-        wines = db.run(
-            "SELECT w.id, w.color, w.country, w.region, w.producer, w.vintage, w.wine, w.quantity - COALESCE(p.n, 0) AS left_over "
-            "FROM wc_wines w LEFT JOIN (SELECT wine_id, COUNT(*) AS n FROM wc_bottles GROUP BY wine_id) p ON p.wine_id = w.id "
-            "WHERE w.quantity - COALESCE(p.n, 0) > 0", fetch="all")
-        if str(only or "").isdigit():
-            wines = [w for w in wines if w["id"] == int(only)]
-        order = {"Red": 0, "White": 1, "Rosé": 2}
-        wines.sort(key=lambda w: (order.get(w["color"], 3), w["country"] or "", w["region"] or "", w["producer"] or "", w["vintage"] or 0, w["id"]))
-        limit = None
-        if str(data.get("count") or "").isdigit():
-            limit = int(data["count"])
-        n = 0
-        for w in wines:
-            for _ in range(w["left_over"]):
-                if not free or (limit is not None and n >= limit):
-                    break
-                sh, sl = free.pop(0)
-                db.run("INSERT INTO wc_bottles (wine_id, rack_id, shelf, slot, placed_at) VALUES (?, ?, ?, ?, ?)", (w["id"], rid, sh, sl, now()))
-                n += 1
-    out = racks_state()
-    out["placed"] = n
+def stock_map():
+    out = {}
+    for s in db.run("SELECT wine_id, place_id, qty, note FROM wc_stock WHERE qty > 0 ORDER BY id", fetch="all"):
+        out.setdefault(s["wine_id"], []).append({"placeId": s["place_id"], "qty": s["qty"], "note": s.get("note") or ""})
     return out
 
 
+def stock_of(wid):
+    return [{"placeId": s["place_id"], "qty": s["qty"], "note": s.get("note") or ""}
+            for s in db.run("SELECT place_id, qty, note FROM wc_stock WHERE wine_id = ? AND qty > 0 ORDER BY id", (wid,), fetch="all")]
+
+
+_place_cache = {}
+
+
+def _place_reading(entity):
+    """Current value of a sensor, cached for a minute so a busy list never hammers Home Assistant."""
+    if not entity or not HA_TOKEN:
+        return None
+    hit = _place_cache.get(entity)
+    if hit and time.time() - hit[0] < 60:
+        return hit[1]
+    val = None
+    try:
+        st = _ha_get("/states/" + quote(entity, safe="._"))
+        unit = (st.get("attributes") or {}).get("unit_of_measurement", "")
+        v = float(st.get("state"))
+        want = app_settings()[0]["tempUnit"]
+        conv = _unit_converter(unit, want)
+        if conv:
+            v, unit = conv(v), "°" + want
+        val = {"value": round(v, 1), "unit": unit}
+    except Exception:
+        val = None
+    _place_cache[entity] = (time.time(), val)
+    return val
+
+
+def place_json(p, bottles=0, readings=True):
+    return {"id": p["id"], "name": p["name"], "kind": p["kind"], "tempEntity": p.get("temp_entity") or "", "humEntity": p.get("hum_entity") or "",
+            "bottles": bottles,
+            "temp": _place_reading(p.get("temp_entity")) if readings else None,
+            "humidity": _place_reading(p.get("hum_entity")) if readings else None}
+
+
+def places_state(readings=True):
+    rows = db.run("SELECT * FROM wc_places ORDER BY pos, id", fetch="all")
+    counts = {r["place_id"]: int(r["n"]) for r in db.run("SELECT place_id, COALESCE(SUM(qty), 0) AS n FROM wc_stock GROUP BY place_id", fetch="all")}
+    placed = db.run("SELECT COALESCE(SUM(s.qty), 0) AS n FROM wc_stock s JOIN wc_wines w ON w.id = s.wine_id", fetch="one")["n"]
+    total = db.run("SELECT COALESCE(SUM(quantity), 0) AS n FROM wc_wines", fetch="one")["n"]
+    return {"places": [place_json(p, counts.get(p["id"], 0), readings) for p in rows], "unplaced": max(0, int(total) - int(placed)),
+            "enabled": places_on()}
+
+
+def get_place(pid):
+    p = db.run("SELECT * FROM wc_places WHERE id = ?", (pid,), fetch="one")
+    if not p:
+        raise ApiError(404, "That place no longer exists")
+    return p
+
+
+def _place_fields(data, partial=False):
+    out = {}
+    if "name" in data or not partial:
+        name = txt(data.get("name"), 60)
+        if not name:
+            raise ApiError(400, "Give the place a name")
+        out["name"] = name
+    if "kind" in data or not partial:
+        kind = data.get("kind") or guess_kind(out.get("name"))
+        if kind not in PLACE_KINDS:
+            raise ApiError(400, "Type must be one of " + ", ".join(PLACE_KINDS))
+        out["kind"] = kind
+    for key, col in (("tempEntity", "temp_entity"), ("humEntity", "hum_entity")):
+        if key in data:
+            v = txt(data.get(key), 80).lower()
+            if v and not ENTITY_RE.match(v):
+                raise ApiError(400, "That does not look like a sensor name. It should look like sensor.fridge_temperature")
+            out[col] = v
+    return out
+
+
+def _name_free(name, skip=None):
+    for p in db.run("SELECT id, name FROM wc_places", fetch="all"):
+        if p["id"] != skip and p["name"].strip().lower() == name.strip().lower():
+            raise ApiError(409, "There is already a place called " + p["name"])
+
+
+def create_place(data):
+    f = _place_fields(data)
+    _name_free(f["name"])
+    n = db.run("SELECT COALESCE(MAX(pos), 0) AS m FROM wc_places", fetch="one")["m"]
+    f["pos"] = n + 1
+    names = list(f)
+    db.run("INSERT INTO wc_places (" + ", ".join(names) + ") VALUES (" + ", ".join("?" for _ in names) + ")", [f[k] for k in names])
+    return places_state()
+
+
+def update_place(pid, data):
+    get_place(pid)
+    f = _place_fields(data, partial=True)
+    if not f:
+        raise ApiError(400, "Nothing to update")
+    if "name" in f:
+        _name_free(f["name"], pid)
+    names = list(f)
+    db.run("UPDATE wc_places SET " + ", ".join(n + " = ?" for n in names) + " WHERE id = ?", [f[k] for k in names] + [pid])
+    _place_cache.clear()
+    return places_state()
+
+
+def order_places(data):
+    ids = data.get("ids")
+    if not isinstance(ids, list):
+        raise ApiError(400, "Send the place ids in the order you want")
+    for i, pid in enumerate(ids):
+        if str(pid).isdigit():
+            db.run("UPDATE wc_places SET pos = ? WHERE id = ?", (i + 1, int(pid)))
+    return places_state()
+
+
+def delete_place(pid, data):
+    get_place(pid)
+    n = db.run("SELECT COALESCE(SUM(qty), 0) AS n FROM wc_stock WHERE place_id = ?", (pid,), fetch="one")["n"]
+    if n:
+        if "moveTo" not in data:
+            raise ApiError(409, "%d bottles are stored here. Choose where they should go first." % n)
+        dest = data.get("moveTo")
+        with db.lock:
+            if dest not in (None, "", "unplaced"):
+                dest = clean_int(dest, 1, 10 ** 12, "Place")
+                if dest == pid:
+                    raise ApiError(400, "Choose another place")
+                get_place(dest)
+                for s in db.run("SELECT wine_id, qty, note FROM wc_stock WHERE place_id = ?", (pid,), fetch="all"):
+                    _stock_add(s["wine_id"], dest, s["qty"], s.get("note"))
+            db.run("DELETE FROM wc_stock WHERE place_id = ?", (pid,))
+    db.run("DELETE FROM wc_places WHERE id = ?", (pid,))
+    _place_cache.clear()
+    return places_state()
+
+
+def _stock_row(wid, pid):
+    return db.run("SELECT * FROM wc_stock WHERE wine_id = ? AND place_id = ?", (wid, pid), fetch="one")
+
+
+def _stock_add(wid, pid, qty, note=None):
+    """Put qty bottles of a wine in a place (adds to what is there). A given note replaces the shelf note."""
+    row = _stock_row(wid, pid)
+    if row:
+        db.run("UPDATE wc_stock SET qty = ?, note = ? WHERE id = ?", (row["qty"] + qty, (note if note is not None else row.get("note")), row["id"]))
+    else:
+        db.run("INSERT INTO wc_stock (wine_id, place_id, qty, note) VALUES (?, ?, ?, ?)", (wid, pid, qty, note or ""))
+
+
+def _stock_take(wid, pid, qty):
+    row = _stock_row(wid, pid)
+    have = row["qty"] if row else 0
+    if have < qty:
+        raise ApiError(409, "There are not that many bottles in " + get_place(pid)["name"])
+    if have == qty:
+        db.run("DELETE FROM wc_stock WHERE id = ?", (row["id"],))
+    else:
+        db.run("UPDATE wc_stock SET qty = ? WHERE id = ?", (have - qty, row["id"]))
+
+
+def normalize_stock(wid):
+    """Never let the places hold more bottles than the wine has. Takes from the biggest place first."""
+    q = db.run("SELECT quantity FROM wc_wines WHERE id = ?", (wid,), fetch="one")
+    if not q:
+        return
+    rows = db.run("SELECT id, qty FROM wc_stock WHERE wine_id = ? ORDER BY qty DESC, id", (wid,), fetch="all")
+    over = sum(r["qty"] for r in rows) - (q["quantity"] or 0)
+    for r in rows:
+        if over <= 0:
+            break
+        cut = min(over, r["qty"])
+        if cut == r["qty"]:
+            db.run("DELETE FROM wc_stock WHERE id = ?", (r["id"],))
+        else:
+            db.run("UPDATE wc_stock SET qty = ? WHERE id = ?", (r["qty"] - cut, r["id"]))
+        over -= cut
+
+
+def _place_arg(v, label="Place"):
+    """A place id, or None for 'not placed'."""
+    if v in (None, "", "unplaced"):
+        return None
+    pid = clean_int(v, 1, 10 ** 12, label)
+    get_place(pid)
+    return pid
+
+
+def move_stock(wid, data):
+    r = get_wine(wid)
+    src = _place_arg(data.get("from"), "From")
+    dst = _place_arg(data.get("to"), "To")
+    qty = clean_int(data.get("qty", 1), 1, 9999, "Bottles")
+    note = txt(data.get("note"), 100) if "note" in data else None
+    if src == dst and note is None:
+        raise ApiError(400, "Choose two different places")
+    with db.lock:
+        placed = sum(s["qty"] for s in db.run("SELECT qty FROM wc_stock WHERE wine_id = ?", (wid,), fetch="all"))
+        if src is None:
+            if (r["quantity"] or 0) - placed < qty:
+                raise ApiError(409, "There are not that many bottles without a place")
+        else:
+            _stock_take(wid, src, qty)
+        if dst is not None:
+            _stock_add(wid, dst, qty, note)
+    return wine_json(get_wine(wid))
+
+
+def set_stock_note(wid, pid, data):
+    get_wine(wid)
+    row = _stock_row(wid, pid)
+    if not row:
+        raise ApiError(404, "This wine is not stored in that place")
+    db.run("UPDATE wc_stock SET note = ? WHERE id = ?", (txt(data.get("note"), 100), row["id"]))
+    return wine_json(get_wine(wid))
+
+
+def stock_after_adjust(wid, delta, place, newq):
+    """Keep the places in step with a changed bottle count."""
+    if place is not None:
+        if delta < 0:
+            _stock_take(wid, place, -delta)
+        else:
+            _stock_add(wid, place, delta)
+    elif delta < 0:
+        normalize_stock(wid)
+
+
+def enable_places():
+    """First time the switch goes on: every distinct shelf text becomes a place holding that wine's bottles."""
+    if db.run("SELECT COUNT(*) AS n FROM wc_places", fetch="one")["n"]:
+        return 0
+    made = {}
+    for w in db.run("SELECT id, quantity, location FROM wc_wines WHERE quantity > 0 ORDER BY id", fetch="all"):
+        loc = txt(w.get("location"), 60)
+        if not loc:
+            continue
+        key = loc.lower()
+        if key not in made:
+            n = len(made) + 1
+            db.run("INSERT INTO wc_places (name, kind, pos) VALUES (?, ?, ?)", (loc, guess_kind(loc), n))
+            made[key] = db.run("SELECT id FROM wc_places WHERE name = ?", (loc,), fetch="one")["id"]
+        _stock_add(w["id"], made[key], w["quantity"])
+    return len(made)
+
+
+def place_for_import(name, cache):
+    key = name.strip().lower()
+    if key not in cache:
+        ex = None
+        for p in db.run("SELECT id, name FROM wc_places", fetch="all"):
+            if p["name"].strip().lower() == key:
+                ex = p["id"]
+        if ex is None:
+            n = db.run("SELECT COALESCE(MAX(pos), 0) AS m FROM wc_places", fetch="one")["m"]
+            db.run("INSERT INTO wc_places (name, kind, pos) VALUES (?, ?, ?)", (name[:60], guess_kind(name), n + 1))
+            ex = db.run("SELECT id FROM wc_places WHERE name = ?", (name[:60],), fetch="one")["id"]
+        cache[key] = ex
+    return cache[key]
+
+
 # ---------------------------------------------------------------- export, backup, stats views
-def rack_labels():
-    names = {r["id"]: r["name"] for r in db.run("SELECT id, name FROM wc_racks", fetch="all")}
-    by = {}
-    for b in db.run("SELECT wine_id, rack_id, shelf, slot FROM wc_bottles ORDER BY rack_id, shelf, slot", fetch="all"):
-        by.setdefault(b["wine_id"], []).append("%s %d/%d" % (names.get(b["rack_id"], "?"), b["shelf"], b["slot"]))
-    return by
-
-
 EXPORT_COLUMNS = ["iWine", "Type", "Color", "Category", "Size", "Currency", "Value", "Price", "Quantity", "Vintage", "Wine", "Producer",
                   "Varietal", "Designation", "Vineyard", "Country", "Region", "SubRegion", "Appellation", "BeginConsume", "EndConsume",
-                  "LikeVotes", "LikePercent", "Location", "Notes", "EAN", "Racks"]
+                  "LikeVotes", "LikePercent", "Location", "Bin", "Notes", "EAN"]
 
 
 def export_csv():
-    """Same column names as CellarTracker, so the file can be imported again (here or in CellarTracker)."""
-    labels = rack_labels()
+    """Same column names as CellarTracker, so the file can be imported again (here or in CellarTracker).
+    A wine kept in several places gets one row per place (Location = the place, Bin = the shelf note)."""
+    sm = stock_map() if places_on() else {}
+    names = {p["id"]: p["name"] for p in db.run("SELECT id, name FROM wc_places", fetch="all")}
     out = io.StringIO()
     wr = csv.writer(out, quoting=csv.QUOTE_ALL, lineterminator="\r\n")
     wr.writerow(EXPORT_COLUMNS)
     for r in db.run("SELECT * FROM wc_wines ORDER BY id", fetch="all"):
         t = r.get("type") or r["color"]
         cat = t.split(" - ", 1)[1] if " - " in t else "Dry"
-        wr.writerow([
-            r.get("iwine") or "wc-%d" % r["id"], t, r["color"], cat, r.get("size") or "750ml", r.get("currency") or "EUR",
-            "%g" % (r.get("value") or 0), "%g" % (r.get("price") or 0), r.get("quantity") or 0,
-            r["vintage"] if r.get("vintage") else 1001, r.get("wine") or "", r["producer"], r.get("varietal") or "",
-            r.get("designation") or "", r.get("vineyard") or "", r.get("country") or "", r.get("region") or "",
-            r.get("subregion") or "", r.get("appellation") or "", r.get("begin_consume") or "", r.get("end_consume") or "",
-            r.get("like_votes") or 0, "" if r.get("like_percent") is None else "%g" % r["like_percent"],
-            r.get("location") or "", r.get("notes") or "", r.get("ean") or "", "; ".join(labels.get(r["id"], [])),
-        ])
-    return ("﻿" + out.getvalue()).encode("utf-8")
+        parts = [(names.get(s["placeId"], ""), s["note"], s["qty"]) for s in sm.get(r["id"], [])]
+        rest = (r.get("quantity") or 0) - sum(p[2] for p in parts)
+        if not parts:
+            parts = [(r.get("location") or "", "", r.get("quantity") or 0)]
+        elif rest > 0:
+            parts.append(("", "", rest))
+        for loc, bin_, n in parts:
+            wr.writerow([
+                r.get("iwine") or "wc-%d" % r["id"], t, r["color"], cat, r.get("size") or "750ml", r.get("currency") or "EUR",
+                "%g" % (r.get("value") or 0), "%g" % (r.get("price") or 0), n,
+                r["vintage"] if r.get("vintage") else 1001, r.get("wine") or "", r["producer"], r.get("varietal") or "",
+                r.get("designation") or "", r.get("vineyard") or "", r.get("country") or "", r.get("region") or "",
+                r.get("subregion") or "", r.get("appellation") or "", r.get("begin_consume") or "", r.get("end_consume") or "",
+                r.get("like_votes") or 0, "" if r.get("like_percent") is None else "%g" % r["like_percent"],
+                loc, bin_, r.get("notes") or "", r.get("ean") or "",
+            ])
+    return ("\ufeff" + out.getvalue()).encode("utf-8")
 
 
 # ---------------------------------------------------------------- tags
@@ -987,7 +1179,7 @@ def delete_review(rid):
 
 # ---------------------------------------------------------------- app settings (country, currency, units)
 def app_settings():
-    d = {"country": "", "currency": "EUR", "tempUnit": "C", "formats": "auto", "paper": "A4", "sekRate": EUR_SEK}
+    d = {"country": "", "currency": "EUR", "tempUnit": "C", "formats": "auto", "paper": "A4", "sekRate": EUR_SEK, "places": False, "shelfNotes": False}
     try:
         saved = json.loads(meta_get("app_settings") or "null")
     except ValueError:
@@ -1040,6 +1232,12 @@ def save_app_settings(data):
         if v is None or v <= 0 or v > 100000:
             raise ApiError(400, "The exchange rate to SEK must be a positive number")
         new["sekRate"] = v
+    for key in ("places", "shelfNotes"):
+        if key in data:
+            new[key] = bool(data.get(key))
+    made = 0
+    if new["places"] and not cur["places"]:
+        made = enable_places()
     converted = 0
     if new["currency"] != cur["currency"] and data.get("convertRate") not in (None, ""):
         rate = num(data.get("convertRate"), None)
@@ -1061,6 +1259,7 @@ def save_app_settings(data):
     meta_set("app_settings", json.dumps(new))
     out = settings_json()
     out["converted"] = converted
+    out["placesMade"] = made
     return out
 
 
@@ -1271,14 +1470,15 @@ def climate_worker():
 
 
 def export_json():
-    wines = [wine_json(r) for r in db.run("SELECT * FROM wc_wines ORDER BY id", fetch="all")]
+    sm = stock_map()
+    wines = [wine_json(r, sm.get(r["id"], [])) for r in db.run("SELECT * FROM wc_wines ORDER BY id", fetch="all")]
     pics = {r["wine_id"]: r["source"] for r in db.run("SELECT wine_id, source FROM wc_images WHERE data IS NOT NULL", fetch="all")}
     for w in wines:
         w["picture"] = pics.get(w["id"], "")
     checkins = db.run("SELECT * FROM wc_checkins ORDER BY id", fetch="all")
     for c in checkins:
         c["ts"] = iso(c.get("ts"))
-    doc = {"app": "wine-cellar", "exported": iso(now()), "wines": wines, "checkins": checkins, "racks": racks_state(),
+    doc = {"app": "wine-cellar", "exported": iso(now()), "wines": wines, "checkins": checkins, "places": places_state(readings=False)["places"],
            "tags": list_tags(), "reviews": [review_json(r) for r in db.run("SELECT * FROM wc_reviews ORDER BY id", fetch="all")]}
     return json.dumps(doc, ensure_ascii=False, indent=1).encode("utf-8")
 
@@ -1304,9 +1504,9 @@ def make_views():
             "SELECT COALESCE(type, color) AS type, SUM(quantity) AS bottles, SUM(quantity * value) AS value_total FROM wc_wines WHERE quantity > 0 GROUP BY 1"),
         "wc_v_drunk_by_month": (
             "SELECT %s AS month, -SUM(delta) AS bottles, AVG(rating) AS avg_rating FROM wc_checkins WHERE kind = 'drink' GROUP BY 1" % month),
-        "wc_v_rack_contents": (
-            "SELECT r.name AS rack, b.shelf, b.slot, w.id AS wine_id, w.producer, w.wine, w.vintage FROM wc_bottles b "
-            "JOIN wc_racks r ON r.id = b.rack_id JOIN wc_wines w ON w.id = b.wine_id"),
+        "wc_v_place_contents": (
+            "SELECT p.name AS place, p.kind, s.note AS bin, w.id AS wine_id, w.producer, w.wine, w.vintage, s.qty AS bottles FROM wc_stock s "
+            "JOIN wc_places p ON p.id = s.place_id JOIN wc_wines w ON w.id = s.wine_id"),
     }
     for name, sql in views.items():
         try:
@@ -1905,6 +2105,10 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(200, delete_wine(wid))
             if len(parts) == 3 and parts[2] == "adjust" and method == "POST":
                 return self._send(200, adjust_wine(wid, self._json()))
+            if len(parts) == 3 and parts[2] == "move" and method == "POST":
+                return self._send(200, move_stock(wid, self._json()))
+            if len(parts) == 4 and parts[2] == "stock" and parts[3].isdigit() and method == "PUT":
+                return self._send(200, set_stock_note(wid, int(parts[3]), self._json()))
             if len(parts) == 3 and parts[2] == "image":
                 if method == "GET":
                     data, mime = get_image(wid)
@@ -1982,25 +2186,19 @@ class Handler(BaseHTTPRequestHandler):
             if wine and not wine.isdigit():
                 raise ApiError(400, "Bad wine id")
             return self._send(200, {"checkins": list_checkins(q.get("limit", ["30"])[0], wine or None)})
-        if parts == ["racks"]:
+        if parts == ["places"]:
             if method == "GET":
-                return self._send(200, racks_state())
+                return self._send(200, places_state())
             if method == "POST":
-                return self._send(201, create_rack(self._json()))
-        if len(parts) >= 2 and parts[0] == "racks" and parts[1].isdigit():
-            rid = int(parts[1])
-            if len(parts) == 2 and method == "PATCH":
-                return self._send(200, update_rack(rid, self._json()))
-            if len(parts) == 2 and method == "DELETE":
-                return self._send(200, delete_rack(rid))
-            if len(parts) == 3 and parts[2] == "bottles" and method == "DELETE":
-                return self._send(200, clear_rack(rid))
-            if len(parts) == 3 and parts[2] == "fill" and method == "POST":
-                return self._send(200, fill_rack(rid, self._json()))
-        if parts == ["bottles", "place"] and method == "POST":
-            return self._send(200, place_bottle(self._json()))
-        if len(parts) == 2 and parts[0] == "bottles" and parts[1].isdigit() and method == "DELETE":
-            return self._send(200, unplace_bottle(int(parts[1])))
+                return self._send(201, create_place(self._json()))
+        if parts == ["places", "order"] and method == "PUT":
+            return self._send(200, order_places(self._json()))
+        if len(parts) == 2 and parts[0] == "places" and parts[1].isdigit():
+            pid = int(parts[1])
+            if method == "PATCH":
+                return self._send(200, update_place(pid, self._json()))
+            if method == "DELETE":
+                return self._send(200, delete_place(pid, self._json()))
         if parts == ["export.csv"] and method == "GET":
             return self._send(200, export_csv(), "text/csv; charset=utf-8", filename="wine-cellar-%s.csv" % now().strftime("%Y-%m-%d"))
         if parts == ["backup.json"] and method == "GET":

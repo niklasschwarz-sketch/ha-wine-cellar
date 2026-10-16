@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.13.0
+- **Storage places:** fridges, cellars, a bar. Switch on *Use several storage places* in *More → Settings*. Each bottle sits in one place, so a wine with several bottles can be spread over several places (4 in Cellar left, 2 in Fridge 1). The switch is off by default and nothing changes for a single shelf.
+- Your existing shelf texts become places the first time you switch it on, each holding that wine's bottles.
+- **More → Storage places:** add, rename, reorder and delete places. Each has a type (cellar, fridge, bar, other) and an optional temperature and humidity sensor from Home Assistant, shown live. Deleting a place asks where its bottles go.
+- Place chips above the wine list filter by place; every wine card shows where its bottles are. The bottle info has *Stored in* with **Move…** and optional shelf notes ("shelf 3").
+- Opening or removing a bottle of a wine that is kept in several places asks which place it comes from. Adding bottles preselects the place you used last.
+- Stats gain *By place*. Export writes one CSV row per place (columns *Location* and *Bin*), and importing that file puts the bottles back. A wine listed on several rows now adds up instead of the last row winning.
+- The unused rack screen (drag and drop racks) is removed. Its empty tables are dropped; the database view `wc_v_rack_contents` is replaced by `wc_v_place_contents`.
+
 ## 0.12.2
 - The picture import hint points to the written zip format in the GitHub documentation (`PICTURE_ZIP_FORMAT.md`).
 
