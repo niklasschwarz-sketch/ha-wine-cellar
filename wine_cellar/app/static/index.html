@@ -2160,11 +2160,7 @@ details.more .charts{margin-top:12px}
           });
           dlg.close(); document.body.appendChild(inp); inp.click();
         } }),
-        h('p', { 'class': 'note', text: 'Attach many pictures at once. Only add pictures you have the right to use. Your own uploaded photos are never replaced.' }),
-        h('details', { 'class': 'note' }, h('summary', { text: 'How to make the zip' }),
-          h('p', { text: 'Put the picture files in a zip. Name each file after the wine it belongs to:' }),
-          h('ul', {}, h('li', { text: '12.jpg: the wine\u2019s number in Wine Cellar (the id in the full copy, JSON)' }), h('li', { text: 'i123456.jpg: its CellarTracker number (iWine column in a CSV)' }), h('li', { text: 'wc-12.jpg: same as 12.jpg' })),
-          h('p', { text: 'JPEG, PNG or WebP, up to 3 MB each (about 1000 pixels wide is plenty), up to 600 files. Optional: a file sources.json in the zip with a link and credit for each picture, for example {"12": {"url": "https://example.com", "credit": "Shop"}}. Add "own": true to mark a picture as your own photo, which then replaces an older picture. The full description is in the documentation of this add-on.' })))));
+        h('p', { 'class': 'note', text: 'Attach many pictures at once, from a zip named by wine number (12.jpg, 48.png). Only add pictures you have the right to use. Your own uploaded photos are never replaced. The zip format is described in the ha-wine-cellar documentation on GitHub (PICTURE_ZIP_FORMAT.md).' }))));
   }
 
   /* ---------- stats ---------- */

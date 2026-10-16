@@ -1,7 +1,7 @@
 # Changelog
 
 ## 0.12.2
-- *Import pictures from a zip* now explains the zip format inside the app ("How to make the zip"), and the add-on documentation has the full format description.
+- The picture import hint points to the written zip format in the GitHub documentation (`PICTURE_ZIP_FORMAT.md`).
 
 ## 0.12.1
 - Wording only: the picture import hint now points to the written zip format (`PICTURE_ZIP_FORMAT.md`). The separate picture finder tool moved to its own project, "Picture Finder for HA Wine Cellar".

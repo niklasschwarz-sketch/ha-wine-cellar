@@ -398,14 +398,6 @@ try:
         page.keyboard.press("Escape")
         api("PUT", "/api/settings", {"country": "SE", "currency": "EUR"})
 
-        # ---- picture zip help
-        page.click("#moreBtn")
-        page.click("#importBtn")
-        page.wait_for_selector("dialog[open] summary:has-text('How to make the zip')")
-        page.click("dialog[open] summary:has-text('How to make the zip')")
-        check("the data sheet explains the zip format", page.locator("dialog[open] :text('i123456.jpg')").count() >= 1 and page.locator("dialog[open] :text('sources.json')").count() >= 1)
-        page.keyboard.press("Escape")
-
         check("no script errors", errors == [], errors)
         browser.close()
 finally:
