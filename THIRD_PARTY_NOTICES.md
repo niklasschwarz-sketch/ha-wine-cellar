@@ -1,5 +1,7 @@
 # Third-party software and data
 
+Wine Cellar itself is MIT licensed (see `LICENSE`). The components below keep their own licences.
+
 Wine Cellar is not affiliated with, endorsed by or sponsored by CellarTracker, Vivino, Wine-Searcher, Systembolaget, Open Food Facts, Home Assistant or Nabu Casa. Those names belong to their owners and are used only to say what the add-on can link to or read from.
 
 ## Software used inside the add-on
