@@ -7,6 +7,7 @@ Set DB_TYPE=sqlite (and SQLITE_PATH) to run against SQLite for local tests.
 """
 import csv
 import io
+import zipfile
 import json
 import os
 import re
@@ -1271,6 +1272,9 @@ def climate_worker():
 
 def export_json():
     wines = [wine_json(r) for r in db.run("SELECT * FROM wc_wines ORDER BY id", fetch="all")]
+    pics = {r["wine_id"]: r["source"] for r in db.run("SELECT wine_id, source FROM wc_images WHERE data IS NOT NULL", fetch="all")}
+    for w in wines:
+        w["picture"] = pics.get(w["id"], "")
     checkins = db.run("SELECT * FROM wc_checkins ORDER BY id", fetch="all")
     for c in checkins:
         c["ts"] = iso(c.get("ts"))
@@ -1551,6 +1555,64 @@ def upload_image(wid, data):
     return wine_json(get_wine(wid))
 
 
+ZIP_MAX_FILES = 600
+ZIP_MAX_TOTAL = 200 * 1024 * 1024
+
+
+def import_pictures(raw):
+    """Attach pictures from a zip of <wine id>.jpg/.png/.webp files (optional sources.json: {"12": {"url": "...", "credit": "..."}}).
+    Your own uploaded photos are never replaced."""
+    try:
+        z = zipfile.ZipFile(io.BytesIO(raw))
+    except zipfile.BadZipFile:
+        raise ApiError(400, "That is not a zip file")
+    infos = [i for i in z.infolist() if not i.is_dir()]
+    if len(infos) > ZIP_MAX_FILES or sum(i.file_size for i in infos) > ZIP_MAX_TOTAL:
+        raise ApiError(413, "The zip is too big (most %d pictures)" % ZIP_MAX_FILES)
+    sources = {}
+    for i in infos:
+        if os.path.basename(i.filename) == "sources.json" and i.file_size < 1024 * 1024:
+            try:
+                sources = json.loads(z.read(i).decode("utf-8"))
+            except ValueError:
+                sources = {}
+            if not isinstance(sources, dict):
+                sources = {}
+    out = {"added": 0, "keptOwn": 0, "unknownWine": 0, "notPicture": 0}
+    for i in infos:
+        m = re.fullmatch(r"(\d{1,9})\.(jpe?g|png|webp)", os.path.basename(i.filename), re.I)
+        if not m:
+            if os.path.basename(i.filename) != "sources.json" and not i.filename.startswith("__MACOSX"):
+                out["notPicture"] += 1
+            continue
+        wid = int(m.group(1))
+        if i.file_size > IMG_MAX:
+            out["notPicture"] += 1
+            continue
+        data = z.read(i)
+        if not sniff(data):
+            out["notPicture"] += 1
+            continue
+        if not db.run("SELECT id FROM wc_wines WHERE id = ?", (wid,), fetch="one"):
+            out["unknownWine"] += 1
+            continue
+        cur = db.run("SELECT source FROM wc_images WHERE wine_id = ?", (wid,), fetch="one")
+        own = isinstance(sources.get(str(wid)), dict) and sources[str(wid)].get("own") is True
+        if cur and cur["source"] == "upload" and not own:
+            out["keptOwn"] += 1
+            continue
+        src = sources.get(str(wid)) if isinstance(sources.get(str(wid)), dict) else {}
+        url = txt(src.get("url"), 500)
+        if url and not url.startswith(("https://", "http://")):
+            url = ""
+        if src.get("own") is True:
+            save_image(wid, data, "upload")
+        else:
+            save_image(wid, data, "web", url or None, txt(src.get("credit"), 120) or "Picture found on the web")
+        out["added"] += 1
+    return out
+
+
 def remove_image(wid):
     get_wine(wid)
     save_image(wid, None, "removed")
@@ -1790,9 +1852,9 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def _body(self):
+    def _body(self, limit=None):
         n = int(self.headers.get("Content-Length") or 0)
-        if n > MAX_BODY:
+        if n > (limit or MAX_BODY):
             raise ApiError(413, "File too large")
         return self.rfile.read(n) if n else b""
 
@@ -1937,6 +1999,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, export_csv(), "text/csv; charset=utf-8", filename="wine-cellar-%s.csv" % now().strftime("%Y-%m-%d"))
         if parts == ["backup.json"] and method == "GET":
             return self._send(200, export_json(), "application/json; charset=utf-8", filename="wine-cellar-backup-%s.json" % now().strftime("%Y-%m-%d"))
+        if parts == ["images", "import"] and method == "POST":
+            return self._send(200, import_pictures(self._body(64 * 1024 * 1024)))
         if parts == ["import"] and method == "POST":
             return self._send(200, import_csv(self._body()))
         raise ApiError(404, "Not found")

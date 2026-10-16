@@ -375,6 +375,34 @@ try:
     check("and back to Celsius", cs["tempMin"] == 10 and cs["tempMax"] == 16, cs)
     call("PUT", "/api/settings", {"country": "SE", "currency": "EUR", "paper": "A4", "formats": "auto", "sekRate": 11})
 
+    # ---- picture zip import
+    import io as _io, zipfile as _zf, base64 as _b64
+    PNG = _b64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
+    wa = call("POST", "/api/wines", {"producer": "Pic Estate", "wine": "A", "vintage": 2020, "color": "Red", "quantity": 1})[1]
+    wb = call("POST", "/api/wines", {"producer": "Pic Estate", "wine": "B", "vintage": 2021, "color": "Red", "quantity": 1})[1]
+    def mkzip(files):
+        b = _io.BytesIO()
+        with _zf.ZipFile(b, "w") as z:
+            for n, d in files.items():
+                z.writestr(n, d)
+        return b.getvalue()
+    z1 = mkzip({"%d.png" % wa["id"]: PNG, "999999.png": PNG, "notes.txt": b"hi", "%d.jpg" % wb["id"]: b"not a picture",
+                "sources.json": json.dumps({str(wa["id"]): {"url": "https://example.com/p", "credit": "Example"}})})
+    s, r = call("POST", "/api/images/import", raw=z1)
+    check("zip import adds a picture and skips bad files", s == 200 and r["added"] == 1 and r["unknownWine"] == 1 and r["notPicture"] == 2, r)
+    wa2 = [w for w in wines() if w["id"] == wa["id"]][0]
+    check("imported picture is attached with its source", wa2["imgSource"] == "web" and wa2["imgCredit"] == "Example" and wa2["imgUrl"] == "https://example.com/p", wa2)
+    call("PUT", "/api/wines/%d/image" % wb["id"], raw=PNG)
+    z2 = mkzip({"%d.png" % wb["id"]: PNG})
+    s, r = call("POST", "/api/images/import", raw=z2)
+    check("your own uploaded photo is not replaced", r["added"] == 0 and r["keptOwn"] == 1, r)
+    z3 = mkzip({"%d.png" % wb["id"]: PNG, "sources.json": json.dumps({str(wb["id"]): {"own": True}})})
+    s, r = call("POST", "/api/images/import", raw=z3)
+    check("a picture marked as your own can replace one", r["added"] == 1, r)
+    check("a non-zip is refused", call("POST", "/api/images/import", raw=b"hello")[0] == 400)
+    bk = call("GET", "/api/backup.json")[1]
+    check("the full copy says which wines have pictures", {w["id"]: w["picture"] for w in bk["wines"]}.get(wa["id"]) == "web", [w.get("picture") for w in bk["wines"]][:3])
+
     # ---- page and unknown paths
     with urllib.request.urlopen(BASE + "/", timeout=5) as r:
         html = r.read().decode()

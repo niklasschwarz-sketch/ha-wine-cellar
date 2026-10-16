@@ -2145,10 +2145,22 @@ details.more .charts{margin-top:12px}
         dlLink('primary', 'api/export.csv', 'Download CSV (all wines)'),
         h('p', { 'class': 'note', text: 'Opens in Excel, Numbers and Google Sheets. It uses the CellarTracker column names, so you can import it again here, or into CellarTracker. It also lists where each wine sits in your racks.' }),
         dlLink('', 'api/backup.json', 'Download full copy (JSON)'),
-        h('p', { 'class': 'note', text: 'Wines, the whole history and rack positions in one file, for safekeeping. For a complete backup of the database, include the Postgres app in your Home Assistant backups.' })),
+        h('p', { 'class': 'note', text: 'Wines, the whole history and rack positions in one file, for safekeeping. For a complete backup, include Wine Cellar in your Home Assistant backups.' })),
       h('div', { 'class': 'f' }, h('div', { 'class': 'lab', text: 'Import' }),
         h('button', { type: 'button', 'class': 'btn', text: 'Import a CSV file…', onclick: function () { dlg.close(); $('file').click(); } }),
-        h('p', { 'class': 'note', text: 'A CellarTracker export, or a file from the export above. Wines already here are updated, new ones are added. Nothing is deleted.' }))));
+        h('p', { 'class': 'note', text: 'A CellarTracker export, or a file from the export above. Wines already here are updated, new ones are added. Nothing is deleted.' }),
+        h('button', { type: 'button', 'class': 'btn', text: 'Import pictures from a zip…', onclick: function () {
+          var inp = h('input', { type: 'file', accept: '.zip,application/zip', hidden: true });
+          inp.addEventListener('change', function () {
+            var f = inp.files && inp.files[0]; if (!f) return;
+            toast('Reading ' + f.name + '…');
+            f.arrayBuffer().then(function (buf) { return api('POST', 'api/images/import', null, buf, 'application/zip'); })
+              .then(function (res) { return load().then(function () { toast(res.added + ' pictures added' + (res.keptOwn ? ', ' + res.keptOwn + ' of your own photos kept' : '') + (res.unknownWine ? ', ' + res.unknownWine + ' for wines not found' : '') + (res.notPicture ? ', ' + res.notPicture + ' files skipped' : '')); }); })
+              .catch(function (e) { toast(e.message); });
+          });
+          dlg.close(); document.body.appendChild(inp); inp.click();
+        } }),
+        h('p', { 'class': 'note', text: 'A zip of pictures named by wine number (12.jpg, 48.png), for example from the picture finder tool. Your own photos are never replaced.' }))));
   }
 
   /* ---------- stats ---------- */
@@ -2553,7 +2565,7 @@ details.more .charts{margin-top:12px}
           if (path.indexOf('api/checkins') === 0) { var wm = path.match(/wine=(\d+)/); return resolve({ checkins: log.filter(function (c) { return !wm || c.wineId === +wm[1]; }).slice(0, 30) }); }
           if (path === 'api/racks' && method === 'GET') return resolve({ racks: [], bottles: [] });
           if (/^api\/(racks|bottles)/.test(path)) throw new Error('Racks work in the installed add-on, not in this preview.');
-          if (path === 'api/import') throw new Error('Import works in the installed add-on, not in this preview.');
+          if (path === 'api/import' || path === 'api/images/import') throw new Error('Import works in the installed add-on, not in this preview.');
           throw new Error('Not found');
         } catch (e) { reject(e); }
       });

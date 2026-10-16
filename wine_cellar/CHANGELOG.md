@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.12.0
+- **Import pictures from a zip:** *More → Import / export → Import pictures from a zip*. A zip of pictures named by wine number (12.jpg) is attached to those wines, with an optional source link. Your own uploaded photos are never replaced.
+- The full copy (JSON) now says which wines already have a picture.
+- New helper for your computer, `tools/picture-finder` in the repository: finds up to 10 candidate pictures per wine through an image-search API, lets you pick or drag in your own, and makes the zip.
+
 ## 0.11.0
 - **Settings (More → Settings):** pick your country and currency. The country suggests the currency, temperature unit and paper size, and each can still be changed. Also: Celsius or Fahrenheit, number and date format (follow the browser or the country), and A4 or US Letter for printing labels and the wine list.
 - Money shows in your currency everywhere (stats, wine list, forms, edit table). If you change currency you can enter a rate to convert the prices already saved, or just switch the symbol.
