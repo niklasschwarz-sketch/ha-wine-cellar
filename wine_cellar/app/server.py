@@ -1560,7 +1560,7 @@ ZIP_MAX_TOTAL = 200 * 1024 * 1024
 
 
 def import_pictures(raw):
-    """Attach pictures from a zip of <wine id>.jpg/.png/.webp files (optional sources.json: {"12": {"url": "...", "credit": "..."}}).
+    """Attach pictures from a zip of <wine id>.jpg/.png/.webp files (or i<CellarTracker iWine>.jpg, wc-<id>.jpg) (optional sources.json: {"12": {"url": "...", "credit": "..."}}).
     Your own uploaded photos are never replaced."""
     try:
         z = zipfile.ZipFile(io.BytesIO(raw))
@@ -1580,12 +1580,13 @@ def import_pictures(raw):
                 sources = {}
     out = {"added": 0, "keptOwn": 0, "unknownWine": 0, "notPicture": 0}
     for i in infos:
-        m = re.fullmatch(r"(\d{1,9})\.(jpe?g|png|webp)", os.path.basename(i.filename), re.I)
+        base = os.path.basename(i.filename)
+        m = re.fullmatch(r"(i|wc-)?(\d{1,12})\.(jpe?g|png|webp)", base, re.I)
         if not m:
-            if os.path.basename(i.filename) != "sources.json" and not i.filename.startswith("__MACOSX"):
+            if base != "sources.json" and not i.filename.startswith("__MACOSX"):
                 out["notPicture"] += 1
             continue
-        wid = int(m.group(1))
+        stem = base.rsplit(".", 1)[0]
         if i.file_size > IMG_MAX:
             out["notPicture"] += 1
             continue
@@ -1593,15 +1594,20 @@ def import_pictures(raw):
         if not sniff(data):
             out["notPicture"] += 1
             continue
-        if not db.run("SELECT id FROM wc_wines WHERE id = ?", (wid,), fetch="one"):
+        if (m.group(1) or "").lower() == "i":
+            row = db.run("SELECT id FROM wc_wines WHERE iwine = ?", (m.group(2),), fetch="one")
+        else:
+            row = db.run("SELECT id FROM wc_wines WHERE id = ?", (int(m.group(2)),), fetch="one")
+        if not row:
             out["unknownWine"] += 1
             continue
+        wid = row["id"]
         cur = db.run("SELECT source FROM wc_images WHERE wine_id = ?", (wid,), fetch="one")
-        own = isinstance(sources.get(str(wid)), dict) and sources[str(wid)].get("own") is True
+        own = isinstance(sources.get(stem), dict) and sources[stem].get("own") is True
         if cur and cur["source"] == "upload" and not own:
             out["keptOwn"] += 1
             continue
-        src = sources.get(str(wid)) if isinstance(sources.get(str(wid)), dict) else {}
+        src = sources.get(stem) if isinstance(sources.get(stem), dict) else {}
         url = txt(src.get("url"), 500)
         if url and not url.startswith(("https://", "http://")):
             url = ""

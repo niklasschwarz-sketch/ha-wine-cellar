@@ -1,7 +1,7 @@
 # Changelog
 
 ## 0.12.0
-- **Import pictures from a zip:** *More → Import / export → Import pictures from a zip*. A zip of pictures named by wine number (12.jpg) is attached to those wines, with an optional source link. Your own uploaded photos are never replaced.
+- **Import pictures from a zip:** *More → Import / export → Import pictures from a zip*. A zip of pictures named by wine number (12.jpg), or by CellarTracker number (i123456.jpg), is attached to those wines, with an optional source link. Your own uploaded photos are never replaced.
 - The full copy (JSON) now says which wines already have a picture.
 - New helper for your computer, `tools/picture-finder` in the repository: finds up to 10 candidate pictures per wine through an image-search API, lets you pick or drag in your own, and makes the zip.
 

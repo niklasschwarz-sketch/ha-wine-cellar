@@ -399,6 +399,13 @@ try:
     z3 = mkzip({"%d.png" % wb["id"]: PNG, "sources.json": json.dumps({str(wb["id"]): {"own": True}})})
     s, r = call("POST", "/api/images/import", raw=z3)
     check("a picture marked as your own can replace one", r["added"] == 1, r)
+    csvdoc = ("iWine,Type,Color,Category,Size,Currency,Value,Price,Quantity,Vintage,Wine,Producer\n"
+              "424242,Red,Red,Dry,750ml,EUR,10,10,1,2018,Zip Test,Zip Estate\n").encode()
+    call("POST", "/api/import", raw=csvdoc)
+    z4 = mkzip({"i424242.png": PNG, "wc-%d.png" % wa["id"]: PNG, "i1.png": PNG})
+    s, r = call("POST", "/api/images/import", raw=z4)
+    zw = [w for w in wines() if w["iwine"] == "424242"][0]
+    check("pictures can be matched by CellarTracker number or wc- id", r["added"] == 2 and r["unknownWine"] == 1 and zw["imgSource"] == "web", (r, zw.get("imgSource")))
     check("a non-zip is refused", call("POST", "/api/images/import", raw=b"hello")[0] == 400)
     bk = call("GET", "/api/backup.json")[1]
     check("the full copy says which wines have pictures", {w["id"]: w["picture"] for w in bk["wines"]}.get(wa["id"]) == "web", [w.get("picture") for w in bk["wines"]][:3])

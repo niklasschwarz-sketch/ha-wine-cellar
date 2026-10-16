@@ -11,6 +11,7 @@ Only python3 is needed (no installs). The page is served on this computer only. 
 in this program and is never sent to the page. Pictures are for your own private cellar.
 """
 import base64
+import csv
 import io
 import json
 import os
@@ -110,6 +111,33 @@ def fetch(url, limit=MAX_PIC):
     return data
 
 
+def parse_csv(raw):
+    """A CellarTracker export or the app's own CSV. Returns wines keyed so the app can match them again."""
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = raw.decode("latin-1")
+    out = []
+    for r in csv.DictReader(io.StringIO(text)):
+        iw = (r.get("iWine") or "").strip()
+        if not iw:
+            continue
+        if iw.lower().startswith("wc-") and iw[3:].isdigit():
+            key = iw.lower()
+        elif iw.isdigit():
+            key = "i" + iw
+        else:
+            continue
+        try:
+            qty = int(float(r.get("Quantity") or 0))
+        except ValueError:
+            qty = 0
+        vint = (r.get("Vintage") or "").strip()
+        out.append({"key": key, "producer": (r.get("Producer") or "").strip(), "wine": (r.get("Wine") or "").strip(),
+                    "vintage": "NV" if vint in ("", "1001", "0") else vint, "quantity": qty, "picture": ""})
+    return out
+
+
 def build_zip(picks):
     buf = io.BytesIO()
     sources, added, failed = {}, 0, []
@@ -134,7 +162,7 @@ def build_zip(picks):
             if not data:
                 failed.append(wid)
                 continue
-            z.writestr("%d.%s" % (wid, sniff(data)), data)
+            z.writestr("%s.%s" % (wid, sniff(data)), data)
             if cand.get("data"):
                 sources[str(wid)] = {"own": True, "credit": "My own picture"}
             else:
@@ -157,8 +185,8 @@ button:disabled{opacity:.5}.bar{display:flex;gap:10px;flex-wrap:wrap;align-items
 .c img{width:110px;height:130px;object-fit:contain;background:#fff;border:2px solid var(--line);border-radius:8px;display:block}
 .c input{display:none}.c input:checked+img{border-color:var(--acc);box-shadow:0 0 0 2px var(--acc)}.err{color:#c0392b}
 </style></head><body><h1>Picture finder</h1>
-<p class="mut">For Wine Cellar. Load your full copy (JSON), search, check the pre-selected pictures, then make a zip and import it in the app. You can also drag your own picture onto any wine, or use "add my own picture".</p>
-<div class="bar"><input type="file" id="f" accept=".json,application/json"><label><input type="checkbox" id="all"> include wines that already have a picture</label>
+<p class="mut">For Wine Cellar. Load your full copy (JSON) or a CSV export, search, check the pre-selected pictures, then make a zip and import it in the app. You can also drag your own picture onto any wine, or use "add my own picture".</p>
+<div class="bar"><input type="file" id="f" accept=".json,.csv,application/json,text/csv"><label><input type="checkbox" id="all"> include wines that already have a picture</label>
 <button id="go" class="p" disabled>Search all</button><button id="zip" disabled>Make zip</button><span id="st" class="mut"></span></div>
 <div id="list"></div>
 <script>
@@ -171,8 +199,11 @@ function draw(){var L=$('list');L.textContent='';W.forEach(function(w,i){var row
  if(w.cands){var c=el('div',{className:'c'});var none=el('label',{},[el('input',{type:'radio',name:'r'+i,checked:w.pick===-1,onchange:function(){w.pick=-1}}),el('div',{style:'width:110px;height:130px;border:2px dashed var(--line);border-radius:8px;display:flex;align-items:center;justify-content:center'},['none']),'skip']);c.appendChild(none);
  w.cands.forEach(function(cd,j){c.appendChild(el('label',{title:cd.title},[el('input',{type:'radio',name:'r'+i,checked:w.pick===j,onchange:function(){w.pick=j}}),el('img',{src:cd.thumb,loading:'lazy',referrerPolicy:'no-referrer'}),cd.source||''])) });row.appendChild(c)}
  L.appendChild(row)});$('zip').disabled=!W.some(function(w){return w.cands&&w.pick>=0})}
-$('f').onchange=function(){var f=this.files[0];if(!f)return;f.text().then(function(t){var d=JSON.parse(t);W=(d.wines||[]).filter(function(w){return w.quantity>0}).map(function(w){return{id:w.id,picture:w.picture||'',label:(w.producer+' '+(w.wine||'')+' '+(w.vintage&&w.vintage!=='NV'?w.vintage:'')).replace(/\s+/g,' ').trim(),raw:w}});
- $('go').disabled=!W.length;$('st').textContent=W.length+' wines in the cellar';draw()}).catch(function(){$('st').textContent='That is not a Wine Cellar JSON file'})};
+function setWines(list){W=list.filter(function(w){return w.quantity>0}).map(function(w){return{id:w.key||String(w.id),picture:w.picture||'',label:(w.producer+' '+(w.wine||'')+' '+(w.vintage&&w.vintage!=='NV'?w.vintage:'')).replace(/\s+/g,' ').trim(),raw:w}});
+ $('go').disabled=!W.length;$('st').textContent=W.length+' wines in the cellar';draw()}
+$('f').onchange=function(){var f=this.files[0];if(!f)return;var bad=function(){$('st').textContent='That is not a Wine Cellar file (use the full copy JSON, or a CSV export)'};
+ if(/\.csv$/i.test(f.name)){fetch('/csv',{method:'POST',body:f}).then(function(r){return r.json()}).then(function(d){if(!d.wines||!d.wines.length)return bad();setWines(d.wines)}).catch(bad)}
+ else f.text().then(function(t){var d=JSON.parse(t);setWines(d.wines||[])}).catch(bad)};
 $('all').onchange=draw;
 $('go').onclick=async function(){if(busy)return;busy=true;$('go').disabled=true;var todo=W.filter(function(w){return !(w.cands&&w.cands.length)&&($('all').checked||!w.picture)});
  for(var n=0;n<todo.length;n++){var w=todo[n];$('st').textContent='Searching '+(n+1)+' of '+todo.length+'…';try{var r=await api('POST','/search',{wine:w.raw});w.cands=r.results;w.pick=r.results.length?0:-1;w.msg=r.results.length?'':'nothing found'}catch(e){w.msg=e.message;if(/key|Too many/.test(e.message)){draw();break}}draw()}
@@ -222,6 +253,11 @@ class Handler(BaseHTTPRequestHandler):
         if not self._local():
             return self._send(403, {"error": "local only"})
         try:
+            if self.path == "/csv":
+                n = int(self.headers.get("Content-Length") or 0)
+                if n > 20 * 1024 * 1024:
+                    raise ValueError("too big")
+                return self._send(200, {"wines": parse_csv(self.rfile.read(n))})
             body = self._json()
             if self.path == "/search":
                 return self._send(200, {"results": search(query_for(body.get("wine") or {}))})
@@ -229,7 +265,10 @@ class Handler(BaseHTTPRequestHandler):
                 picks = []
                 for p in (body.get("picks") or [])[:600]:
                     c = p.get("cand") or {}
-                    picks.append((int(p["id"]), {k: str(c.get(k) or "") for k in ("full", "thumb", "page", "source", "data")}))
+                    key = str(p["id"])
+                    if not re.fullmatch(r"(i|wc-)?\d{1,12}", key):
+                        raise ValueError("bad id")
+                    picks.append((key, {k: str(c.get(k) or "") for k in ("full", "thumb", "page", "source", "data")}))
                 data, added, failed = build_zip(picks)
                 return self._send(200, data, "application/zip", {"X-Added": str(added), "X-Failed": str(len(failed))})
             self._send(404, {"error": "not found"})

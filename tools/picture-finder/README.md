@@ -7,13 +7,13 @@ A small helper that runs on your own computer (Mac, Windows or Linux) and finds 
 - An image-search API key. This tool uses [Brave Search](https://brave.com/search/api/) (create an account, choose a plan, copy the key). Google's own image search API is closed to new customers and scraping Google is against its terms, so it is not used. Check the current free allowance and terms on Brave's site.
 
 ## Steps
-1. In Wine Cellar: **More → Import / export → Download full copy (JSON)**.
+1. In Wine Cellar: **More → Import / export → Download full copy (JSON)**. (A CSV also works: the app's own CSV download or your CellarTracker export. Wines are then matched by their CellarTracker number.)
 2. In Terminal, in this folder:
    ```
    BRAVE_API_KEY=your-key python3 picture_finder.py
    ```
    (or save the key once in a file named `.picture_finder_key` in your home folder and run `python3 picture_finder.py`)
-3. Open <http://127.0.0.1:8765>, choose the JSON file, press **Search all**.
+3. Open <http://127.0.0.1:8765>, choose the JSON or CSV file, press **Search all**.
 4. Each wine shows up to 10 candidates and the best match is already selected. Click another picture, or choose **none** to skip. You can also **drag your own picture onto a wine**, or use **add my own picture**.
 5. Press **Make zip**, then in Wine Cellar: **More → Import / export → Import pictures from a zip**.
 

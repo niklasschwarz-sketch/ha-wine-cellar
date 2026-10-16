@@ -72,6 +72,12 @@ try:
     src = json.loads(z.read("sources.json"))
     check("zip holds the chosen pictures named by wine id", s == 200 and names == ["5.png", "6.png", "sources.json"] and h["X-Added"] == "2" and h["X-Failed"] == "1", (names, h["X-Added"], h["X-Failed"]))
     check("zip records sources, and marks your own picture", src["5"]["url"] == "https://shop.example/0" and src["6"].get("own") is True, src)
+    csvtxt = "\ufeffiWine,Type,Color,Quantity,Vintage,Wine,Producer\r\n123456,Red - Dry,Red,2,2019,Cuvee X,Domaine Test\r\nwc-7,White,White,1,1001,Plain,Some Estate\r\n999,Red,Red,0,2015,Empty,Gone\r\n,Red,Red,1,2015,NoId,Nobody\r\n"
+    req = urllib.request.Request(BASE + "/csv", data=csvtxt.encode("utf-8"), method="POST")
+    cw = json.loads(urllib.request.urlopen(req, timeout=5).read())["wines"]
+    check("a CSV export is read, keyed so the app can match it", [(w["key"], w["quantity"], w["vintage"]) for w in cw] == [("i123456", 2, "2019"), ("wc-7", 1, "NV"), ("i999", 0, "2015")], cw)
+    s, b, h = post("/zip", {"picks": [{"id": "i123456", "cand": res[0]}]})
+    check("zip files for CSV wines are named by their key", "i123456.png" in zipfile.ZipFile(io.BytesIO(b)).namelist(), s)
     check("bad request is refused", post("/zip", {"picks": [{"cand": {}}]})[0] == 400)
 
     from playwright.sync_api import sync_playwright
