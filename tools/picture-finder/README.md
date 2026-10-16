@@ -17,6 +17,9 @@ A small helper that runs on your own computer (Mac, Windows or Linux) and finds 
 4. Each wine shows up to 10 candidates and the best match is already selected. Click another picture, or choose **none** to skip. You can also **drag your own picture onto a wine**, or use **add my own picture**.
 5. Press **Make zip**, then in Wine Cellar: **More → Import / export → Import pictures from a zip**.
 
+## As a Mac app (double-click to start)
+In Terminal, in this folder, run once: `sh make-mac-app.sh`. It creates **Picture Finder** in your `Applications` folder inside your home folder (`~/Applications`). Double-click it: the first time it asks for your Brave key and stores it only on your Mac, and it opens the page in your browser. Quit it from the Dock to stop. It works on Apple silicon (M1 and later) and Intel Macs. If macOS offers to install the command line developer tools, accept, because that provides Python 3. The app is made on your own Mac, so macOS does not block it. It is not signed with an Apple developer account, so if you copy it to another Mac you may need to right-click it and choose Open the first time.
+
 ## Good to know
 - Only wines without a picture are searched, unless you tick the box to include the others.
 - Your own photos in the cellar are never replaced by found pictures. A picture you drop on a wine here counts as your own and does replace the old one.
