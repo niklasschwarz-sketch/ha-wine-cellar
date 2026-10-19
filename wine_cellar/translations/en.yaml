@@ -6,7 +6,7 @@ configuration:
       https://aistudio.google.com/apikey. Leave empty to keep this off. When it is on, the label photo is sent to Google.
   label_ai_model:
     name: Gemini model
-    description: The Gemini model used to read labels. The default works with the free tier. Only change it if Google retires that model.
+    description: Leave empty. The add-on then finds the newest Gemini Flash model your key can use, and switches by itself when Google retires one. Only fill this in to force a specific model.
   auto_images:
     name: Look up pictures online
     description: Ask Open Food Facts (a free, open database) for a picture of each wine in stock.

@@ -1808,7 +1808,7 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
       return readLabelAI(blob).catch(function (e) {
         return ocrAvailable().then(function (ok) {
           if (!ok) { ocrBox.replaceChildren(h('p', { 'class': 'err', text: 'Could not read the label with Gemini: ' + e.message + ' The photo is still added, fill in the details by hand.' })); return; }
-          return readLabelOCR(blob).then(function () { ocrBox.insertBefore(h('p', { 'class': 'note', text: 'Gemini was not available (' + e.message + ') so the label was read on this device instead.' }), ocrBox.firstChild); });
+          return readLabelOCR(blob).then(function () { ocrBox.insertBefore(h('p', { 'class': 'note', text: 'Gemini could not read the label. ' + e.message + ' This is the on-device reading instead.' }), ocrBox.firstChild); });
         });
       });
     }

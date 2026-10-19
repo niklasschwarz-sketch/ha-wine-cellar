@@ -1,5 +1,5 @@
 name: Wine Cellar
-version: "0.15.0"
+version: "0.15.1"
 slug: wine_cellar
 description: Your wine cellar in Home Assistant. Bottles, barcode scanning and labels, pictures, food pairing, cellar climate, wine list, stats and export. Works out of the box, no database to set up.
 url: https://github.com/niklasschwarz-sketch/ha-wine-cellar
@@ -18,7 +18,7 @@ options:
   systembolaget_prices: false
   eur_sek_rate: 11.0
   label_ai_key: ""
-  label_ai_model: gemini-2.5-flash
+  label_ai_model: ""
 schema:
   auto_images: bool?
   systembolaget_prices: bool?

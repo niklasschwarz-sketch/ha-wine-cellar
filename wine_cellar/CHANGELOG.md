@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.15.1
+- **Fix: Gemini label reading failed with "HTTP 404".** Google had retired the model the add-on asked for (gemini-2.5-flash is no longer offered to new keys). The add-on now picks the model itself: it asks Google which Flash models your key can use, takes the newest, and switches again when Google retires one. Leave the *Gemini model* option empty; if it still says gemini-2.5-flash from 0.15.0, the add-on finds a working model anyway.
+- Clearer messages when Gemini says no, and the on-device fallback is labelled as such.
+
 ## 0.15.0
 - **Read labels with Gemini (optional):** add your own free Gemini API key in the add-on's Configuration tab (*Gemini API key*) and photographing a label fills in producer, wine name, vintage, colour, style, country, region, appellation and grape. If you already have that wine and vintage, the form offers **Add a bottle to it**. It is off until you add a key. The label photo is sent to Google when it is on. If Gemini is unavailable, the on-device reader is used as before.
 - The add-on options now have names and short explanations in the Configuration tab.

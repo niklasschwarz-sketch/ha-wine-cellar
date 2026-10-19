@@ -29,7 +29,7 @@ MOCK_PORT = PORT + 1
 ENV = dict(os.environ, DB_TYPE="sqlite", SQLITE_PATH=DB, PORT=str(PORT), AUTO_IMAGES="0", AUTO_PRICES="0",
            HA_API="http://127.0.0.1:%d/api" % MOCK_PORT, SUPERVISOR_TOKEN="test-token", CLIMATE_CHECK_SECS="1", CLIMATE_RENOTIFY_SECS="3600",
            CLIMATE_TEMP_ENTITY="sensor.cellar_temp", CLIMATE_HUMIDITY_ENTITY="sensor.cellar_humidity", HUMIDITY_MIN="60", HUMIDITY_MAX="75",
-           LABEL_AI_KEY="test-gemini-key", LABEL_AI_MODEL="gemini-test", LABEL_AI_BASE="http://127.0.0.1:%d" % (MOCK_PORT + 1))
+           LABEL_AI_KEY="test-gemini-key", LABEL_AI_MODEL="gemini-retired", LABEL_AI_BASE="http://127.0.0.1:%d" % (MOCK_PORT + 1))
 
 # A tiny stand-in for the Home Assistant API: two sensors, one fine and one too dry.
 import http.server
@@ -90,6 +90,22 @@ class MockGemini(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
+    def do_GET(self):
+        GEMINI_SEEN.append({"path": self.path, "list": True, "key": self.headers.get("x-goog-api-key")})
+        out = {"models": [
+            {"name": "models/gemini-2.5-flash", "supportedGenerationMethods": ["generateContent"]},
+            {"name": "models/gemini-3.8-flash", "supportedGenerationMethods": ["generateContent", "countTokens"]},
+            {"name": "models/gemini-3.8-flash-lite", "supportedGenerationMethods": ["generateContent"]},
+            {"name": "models/gemini-3.9-flash", "supportedGenerationMethods": ["embedContent"]},
+            {"name": "models/gemini-4-argon", "supportedGenerationMethods": ["generateContent"]},
+        ]}
+        data = json.dumps(out).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
     def do_POST(self):
         import base64 as b64
         n = int(self.headers.get("Content-Length") or 0)
@@ -100,7 +116,9 @@ class MockGemini(http.server.BaseHTTPRequestHandler):
         GEMINI_SEEN.append({"path": self.path, "key": self.headers.get("x-goog-api-key"), "mime": img["mime_type"], "pic": pic,
                             "mimetype": req["generationConfig"].get("responseMimeType"), "prompt": parts[0]["text"]})
         status, out = 200, None
-        if b"LIMIT" in pic:
+        if "gemini-retired" in self.path:
+            status, out = 404, {"error": {"code": 404, "message": "This model models/gemini-retired is no longer available to new users."}}
+        elif b"LIMIT" in pic:
             status, out = 429, {"error": {"message": "quota"}}
         elif b"BADKEY" in pic:
             status, out = 400, {"error": {"message": "API key not valid"}}
@@ -534,12 +552,18 @@ try:
     check("label photo is read", s == 200 and f.get("producer") == "Domaine Test" and f.get("cuvee") == "Les Essais" and f.get("vintage") == 2019
           and f.get("color") == "Rosé" and f.get("style") == "Dry" and f.get("country") == "France" and f.get("region") == ""
           and f.get("appellation") == "Gevrey-Chambertin" and f.get("varietal") == "Pinot Noir" and "extra" not in f, d)
+    paths = [x["path"] for x in GEMINI_SEEN]
+    check("a retired model is replaced by the newest Flash model the key can use (one retry)",
+          paths == ["/v1beta/models/gemini-retired:generateContent", "/v1beta/models?pageSize=200", "/v1beta/models/gemini-3.8-flash:generateContent"], paths)
     seen = GEMINI_SEEN[-1]
     check("Gemini gets the key in a header, the model in the path and the exact photo",
-          seen["key"] == "test-gemini-key" and seen["path"] == "/v1beta/models/gemini-test:generateContent" and seen["mime"] == "image/jpeg"
+          seen["key"] == "test-gemini-key" and seen["mime"] == "image/jpeg" and GEMINI_SEEN[1]["key"] == "test-gemini-key"
           and seen["pic"] == JPG and seen["mimetype"] == "application/json" and "producer" in seen["prompt"], seen)
+    n_seen = len(GEMINI_SEEN)
     s, d = call("POST", "/api/label", raw=b"just text")
-    check("a non-picture is refused and never sent", s == 400 and len(GEMINI_SEEN) == 1, (s, d))
+    check("a non-picture is refused and never sent", s == 400 and len(GEMINI_SEEN) == n_seen, (s, d))
+    s, d = call("POST", "/api/label", raw=JPG + b"again")
+    check("the working model is remembered, no more lookups", s == 200 and [x["path"] for x in GEMINI_SEEN[n_seen:]] == ["/v1beta/models/gemini-3.8-flash:generateContent"], [x["path"] for x in GEMINI_SEEN[n_seen:]])
     s, d = call("POST", "/api/label", raw=JPG + b"LIMIT")
     check("free limit gives a clear 429", s == 429 and "limit" in d["error"].lower(), (s, d))
     s, d = call("POST", "/api/label", raw=JPG + b"BADKEY")

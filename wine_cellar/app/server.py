@@ -45,7 +45,7 @@ EUR_SEK = float(os.environ.get("EUR_SEK", "11") or 11)
 USER_AGENT = "WineCellarHomeAssistant/0.2 (personal home cellar; local add-on)"
 # Optional: read a label photo with Google's Gemini (free tier with your own key). Off unless a key is set.
 LABEL_KEY = os.environ.get("LABEL_AI_KEY", "").strip()
-LABEL_MODEL = re.sub(r"[^A-Za-z0-9._-]", "", os.environ.get("LABEL_AI_MODEL", "").strip()) or "gemini-2.5-flash"
+LABEL_MODEL = re.sub(r"[^A-Za-z0-9._-]", "", os.environ.get("LABEL_AI_MODEL", "").strip())  # empty: pick the newest Flash model automatically
 LABEL_BASE = os.environ.get("LABEL_AI_BASE", "https://generativelanguage.googleapis.com").rstrip("/")
 LABEL_MAX = 4 * 1024 * 1024
 
@@ -2131,6 +2131,35 @@ def clean_label(d):
     return out
 
 
+_label_model = [""]  # a model found automatically, kept until the add-on restarts
+
+
+def _gemini(url, body=None):
+    headers = {"x-goog-api-key": LABEL_KEY, "User-Agent": USER_AGENT}
+    if body is not None:
+        headers["Content-Type"] = "application/json"
+    req = urllib.request.Request(url, data=json.dumps(body).encode("utf-8") if body is not None else None, method="POST" if body is not None else "GET", headers=headers)
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return r.read(2 * 1024 * 1024)
+
+
+def newest_flash_model():
+    """Google retires models often. Ask which ones this key can use and take the newest plain Flash model."""
+    try:
+        data = json.loads(_gemini("%s/v1beta/models?pageSize=200" % LABEL_BASE).decode("utf-8"))
+    except (urllib.error.URLError, OSError, ValueError):
+        return ""
+    best = None
+    for m in data.get("models") or []:
+        name = str(m.get("name", "")).replace("models/", "")
+        ver = re.fullmatch(r"gemini-(\d+(?:\.\d+)?)-flash", name)
+        if ver and "generateContent" in (m.get("supportedGenerationMethods") or []):
+            cand = (float(ver.group(1)), name)
+            if best is None or cand > best:
+                best = cand
+    return best[1] if best else ""
+
+
 def read_label(blob):
     if not LABEL_KEY:
         raise ApiError(503, "Reading labels with Gemini is not set up. Add a Gemini API key in the add-on options.")
@@ -2141,28 +2170,40 @@ def read_label(blob):
         "contents": [{"parts": [{"text": LABEL_PROMPT}, {"inline_data": {"mime_type": mime, "data": base64.b64encode(blob).decode("ascii")}}]}],
         "generationConfig": {"responseMimeType": "application/json", "temperature": 0},
     }
-    url = "%s/v1beta/models/%s:generateContent" % (LABEL_BASE, LABEL_MODEL)
-    req = urllib.request.Request(url, data=json.dumps(body).encode("utf-8"), method="POST",
-                                 headers={"Content-Type": "application/json", "x-goog-api-key": LABEL_KEY, "User-Agent": USER_AGENT})
     with _label_lock:  # one photo at a time keeps us inside the free per-minute limit
-        try:
-            with urllib.request.urlopen(req, timeout=60) as r:
-                raw = r.read(2 * 1024 * 1024)
-        except urllib.error.HTTPError as e:
-            detail = ""
+        model = _label_model[0] or LABEL_MODEL or newest_flash_model()
+        if not model:
+            raise ApiError(502, "Could not find a Gemini model for this key. Check the API key in the add-on options.")
+        raw = None
+        for attempt in (1, 2):
             try:
-                detail = e.read(400).decode("utf-8", "replace").replace(LABEL_KEY, "***")
-            except Exception:
-                pass
-            log("Label reading: Gemini answered HTTP %d %s" % (e.code, detail[:200]))
-            if e.code == 429:
-                raise ApiError(429, "Gemini's free limit was reached. Try again in a minute, or tomorrow if it keeps happening.")
-            if e.code in (400, 401, 403, 404):
-                raise ApiError(502, "Gemini did not accept the request (HTTP %d). Check the API key and model name in the add-on options." % e.code)
-            raise ApiError(502, "Gemini had a problem (HTTP %d). Try again later." % e.code)
-        except (urllib.error.URLError, OSError, ValueError) as e:
-            log("Label reading: could not reach Gemini: %s" % type(e).__name__)
-            raise ApiError(502, "Could not reach Gemini. Check the internet connection of Home Assistant.")
+                raw = _gemini("%s/v1beta/models/%s:generateContent" % (LABEL_BASE, model), body)
+                _label_model[0] = model
+                break
+            except urllib.error.HTTPError as e:
+                detail = ""
+                try:
+                    detail = e.read(600).decode("utf-8", "replace").replace(LABEL_KEY, "***")
+                except Exception:
+                    pass
+                detail = " ".join(detail.split())
+                log("Label reading: Gemini answered HTTP %d for %s %s" % (e.code, model, detail[:300]))
+                if e.code == 404 and attempt == 1:  # the model is gone or not offered to this key: look for the current one
+                    found = newest_flash_model()
+                    if found and found != model:
+                        log("Label reading: switching to %s" % found)
+                        model = found
+                        continue
+                if e.code == 429:
+                    raise ApiError(429, "Gemini's free limit was reached. Try again in a minute, or tomorrow if it keeps happening.")
+                if e.code == 404:
+                    raise ApiError(502, "Gemini does not offer the model %s to this key. Clear the Gemini model option so the add-on picks a current one." % model)
+                if e.code in (400, 401, 403):
+                    raise ApiError(502, "Gemini did not accept the request (HTTP %d). Check the API key in the add-on options." % e.code)
+                raise ApiError(502, "Gemini had a problem (HTTP %d). Try again later." % e.code)
+            except (urllib.error.URLError, OSError, ValueError) as e:
+                log("Label reading: could not reach Gemini: %s" % type(e).__name__)
+                raise ApiError(502, "Could not reach Gemini. Check the internet connection of Home Assistant.")
     try:
         data = json.loads(raw.decode("utf-8"))
         cands = data.get("candidates") or []
