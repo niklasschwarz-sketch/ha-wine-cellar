@@ -5,6 +5,7 @@ Small JSON API + static page. Stores wines and a check-in log in Postgres
 (the existing Postgres add-on). Standard library only, plus pg8000 for Postgres.
 Set DB_TYPE=sqlite (and SQLITE_PATH) to run against SQLite for local tests.
 """
+import base64
 import csv
 import io
 import zipfile
@@ -42,6 +43,11 @@ SB_URL = os.environ.get("SB_URL", "https://raw.githubusercontent.com/AlexGustafs
 SB_MAX = 120 * 1024 * 1024
 EUR_SEK = float(os.environ.get("EUR_SEK", "11") or 11)
 USER_AGENT = "WineCellarHomeAssistant/0.2 (personal home cellar; local add-on)"
+# Optional: read a label photo with Google's Gemini (free tier with your own key). Off unless a key is set.
+LABEL_KEY = os.environ.get("LABEL_AI_KEY", "").strip()
+LABEL_MODEL = re.sub(r"[^A-Za-z0-9._-]", "", os.environ.get("LABEL_AI_MODEL", "").strip()) or "gemini-2.5-flash"
+LABEL_BASE = os.environ.get("LABEL_AI_BASE", "https://generativelanguage.googleapis.com").rstrip("/")
+LABEL_MAX = 4 * 1024 * 1024
 
 HA_API = os.environ.get("HA_API", "http://supervisor/core/api").rstrip("/")
 HA_TOKEN = os.environ.get("SUPERVISOR_TOKEN", "")
@@ -2082,7 +2088,99 @@ def price_worker():
 def app_config():
     n = db.run("SELECT COUNT(*) AS n FROM wc_sb", fetch="one")["n"]
     st, saved = app_settings()
-    return {"eurSek": st["sekRate"], "settings": st, "settingsSaved": saved, "autoPrices": AUTO_PRICES, "sbProducts": n, "sbUpdated": meta_get("sb_refreshed")}
+    return {"eurSek": st["sekRate"], "settings": st, "settingsSaved": saved, "autoPrices": AUTO_PRICES, "sbProducts": n, "sbUpdated": meta_get("sb_refreshed"), "labelAi": bool(LABEL_KEY)}
+
+
+# ---------------------------------------------------------------- label photo, read by Gemini
+LABEL_PROMPT = (
+    "You read the label of a wine bottle from a photo (front label, maybe the back label too). "
+    "Answer with one JSON object and nothing else, with exactly these keys: "
+    "producer, cuvee, vintage, color, style, country, region, appellation, grape. "
+    "Use null for anything that is not printed on the label or that you cannot tell. Never guess. "
+    "producer: the winery, estate or house name as printed. "
+    "cuvee: the wine's own name, vineyard or cuvee if printed; do not repeat the producer or the appellation in it. "
+    "vintage: the four-digit harvest year, or \"NV\" if the label says non-vintage; null if no year is shown. "
+    "color: Red, White or Rose. style: Dry, Off-dry, Sparkling or Sweet. "
+    "country: in English. region: the wine region, for example Burgundy or Rhone Valley. "
+    "appellation: as printed, for example Gevrey-Chambertin. "
+    "grape: the grape varieties printed on the label, separated by commas."
+)
+_label_lock = threading.Lock()
+
+
+def _lv(v, limit=150):
+    s = txt(v, limit)
+    return "" if s.lower() in ("null", "none", "n/a", "na", "-", "not shown", "unknown") else s
+
+
+def clean_label(d):
+    """Take only the fields we expect from the model's answer, trimmed to what the form accepts."""
+    out = {k: _lv(d.get(k)) for k in ("producer", "cuvee", "country", "region", "appellation")}
+    out["varietal"] = _lv(d.get("grape") or d.get("varietal"))
+    v = _lv(d.get("vintage"), 10)
+    if v.upper() == "NV":
+        out["vintage"] = "NV"
+    elif re.fullmatch(r"(19|20)\d\d", v) and int(v) <= datetime.now().year + 1:
+        out["vintage"] = int(v)
+    else:
+        out["vintage"] = ""
+    c = _lv(d.get("color"), 20).lower()
+    out["color"] = "Rosé" if c in ("rose", "rosé", "rosado", "rosato", "pink") else ("Red" if c == "red" else ("White" if c == "white" else ""))
+    s = _lv(d.get("style"), 20).lower()
+    out["style"] = next((x for x in STYLES if x.lower() == s), "")
+    return out
+
+
+def read_label(blob):
+    if not LABEL_KEY:
+        raise ApiError(503, "Reading labels with Gemini is not set up. Add a Gemini API key in the add-on options.")
+    mime = sniff(blob or b"")
+    if not mime:
+        raise ApiError(400, "That is not a picture")
+    body = {
+        "contents": [{"parts": [{"text": LABEL_PROMPT}, {"inline_data": {"mime_type": mime, "data": base64.b64encode(blob).decode("ascii")}}]}],
+        "generationConfig": {"responseMimeType": "application/json", "temperature": 0},
+    }
+    url = "%s/v1beta/models/%s:generateContent" % (LABEL_BASE, LABEL_MODEL)
+    req = urllib.request.Request(url, data=json.dumps(body).encode("utf-8"), method="POST",
+                                 headers={"Content-Type": "application/json", "x-goog-api-key": LABEL_KEY, "User-Agent": USER_AGENT})
+    with _label_lock:  # one photo at a time keeps us inside the free per-minute limit
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                raw = r.read(2 * 1024 * 1024)
+        except urllib.error.HTTPError as e:
+            detail = ""
+            try:
+                detail = e.read(400).decode("utf-8", "replace").replace(LABEL_KEY, "***")
+            except Exception:
+                pass
+            log("Label reading: Gemini answered HTTP %d %s" % (e.code, detail[:200]))
+            if e.code == 429:
+                raise ApiError(429, "Gemini's free limit was reached. Try again in a minute, or tomorrow if it keeps happening.")
+            if e.code in (400, 401, 403, 404):
+                raise ApiError(502, "Gemini did not accept the request (HTTP %d). Check the API key and model name in the add-on options." % e.code)
+            raise ApiError(502, "Gemini had a problem (HTTP %d). Try again later." % e.code)
+        except (urllib.error.URLError, OSError, ValueError) as e:
+            log("Label reading: could not reach Gemini: %s" % type(e).__name__)
+            raise ApiError(502, "Could not reach Gemini. Check the internet connection of Home Assistant.")
+    try:
+        data = json.loads(raw.decode("utf-8"))
+        cands = data.get("candidates") or []
+        if not cands:
+            raise ApiError(422, "Gemini would not read this picture. Try another photo.")
+        parts = (cands[0].get("content") or {}).get("parts") or []
+        text = "".join(p.get("text", "") for p in parts).strip()
+        text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text)
+        ans = json.loads(text)
+    except ApiError:
+        raise
+    except (ValueError, AttributeError, TypeError):
+        raise ApiError(502, "Gemini gave an answer that could not be understood. Try again.")
+    if isinstance(ans, list) and ans and isinstance(ans[0], dict):
+        ans = ans[0]
+    if not isinstance(ans, dict):
+        raise ApiError(502, "Gemini gave an answer that could not be understood. Try again.")
+    return clean_label(ans)
 
 
 # ---------------------------------------------------------------- http
@@ -2227,6 +2325,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(202, {"started": True})
         if len(parts) == 2 and parts[0] == "ean" and method == "GET":
             return self._send(200, lookup_ean(parts[1]))
+        if parts == ["label"] and method == "POST":
+            return self._send(200, {"fields": read_label(self._body(LABEL_MAX))})
         if parts == ["checkins"] and method == "GET":
             wine = q.get("wine", [""])[0]
             if wine and not wine.isdigit():

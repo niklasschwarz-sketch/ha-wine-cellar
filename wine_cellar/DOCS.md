@@ -14,7 +14,7 @@ Wine Cellar is free software under the Apache License 2.0 and is provided "as is
 ## Privacy: what goes over the internet
 - **Pictures:** for each wine in stock the add-on asks Open Food Facts (a free, open database) for a picture, using the producer, wine name and barcode. Switch it off with the option `auto_images`.
 - **Systembolaget prices:** off by default. If you turn on `systembolaget_prices` it downloads a public price list once a week. Your own wines are never sent anywhere.
-- **Label reading** happens in your browser. The photo stays in your home.
+- **Label reading** happens in your browser and the photo stays in your home, unless you add a Gemini key (see *Label photo*). With a key, each label photo you take is sent to Google's Gemini service to be read. Nothing else is sent. On Google's free tier, Google may use content you send to improve its products, so read their current terms before you turn it on.
 - Pairing, tags, reviews, labels and the climate strip run entirely inside Home Assistant.
 - The first install downloads the label reader (about 20 MB) from a public software CDN while the add-on is built.
 
@@ -28,7 +28,11 @@ Your cellar is one file inside the add-on (`/data/winecellar.db`). Home Assistan
 When you type a producer that is already in your cellar, the form fills in country, region, grape, colour and style, and suggests a drinking window from your earlier vintages (it is only a suggestion; change it freely).
 
 ## Label photo
-Scan, then "Photograph the label", or use "Read the label" in the picture box. The text is read on your phone or computer; the photo never leaves your home. It finds the producer (if you already have it), vintage, appellation, grape and colour, and lists other lines you can tap into a field. Reading curved labels is not perfect, so always check the fields. The reader is downloaded when the add-on is built; if it is missing, the photo is only saved as the picture. On iPhone and Mac you can also tap a field and choose Scan Text.
+Scan, then "Photograph the label", or use "Read the label" in the picture box.
+
+**With Gemini (optional, better):** Gemini reads the whole label, including curved and decorative ones, and fills in producer, wine name, vintage, colour, style, country, region, appellation and grape. If you already own that wine and vintage, the form offers "Add a bottle to it". To turn it on, get a free key at https://aistudio.google.com/apikey, open the add-on's **Configuration** tab, paste it in **Gemini API key** and restart the add-on. Leave the field empty to keep it off. The key is stored only in the add-on's options, and the photo goes straight from your add-on to Google. The free tier has daily and per-minute limits; if you hit one the form says so and, if the on-device reader is installed, uses that instead.
+
+**Without a key:** the text is read on your phone or computer; the photo never leaves your home. It finds the producer (if you already have it), vintage, appellation, grape and colour, and lists other lines you can tap into a field. Reading curved labels is not perfect, so always check the fields. The reader is downloaded when the add-on is built; if it is missing, the photo is only saved as the picture. On iPhone and Mac you can also tap a field and choose Scan Text.
 
 ## Pictures
 For many wines at once, use **More → Import / export → Import pictures from a zip** (files named by wine number, for example `12.jpg`). The zip format is described in `PICTURE_ZIP_FORMAT.md` in the ha-wine-cellar documentation on GitHub. Only add pictures you have the right to use.

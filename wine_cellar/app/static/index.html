@@ -542,7 +542,7 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
   var fmtN = function (n) { return Math.round(n).toLocaleString(LOC); };
   var eur0, eur1, eur2, sek;
   var pct0 = function (x) { return Math.round(x * 100) + '%'; };
-  var cfg = { eurSek: 11, autoPrices: false, sbProducts: 0, sbUpdated: null, settings: { country: '', currency: 'EUR', tempUnit: 'C', formats: 'auto', paper: 'A4', sekRate: 11 }, settingsSaved: false };
+  var cfg = { eurSek: 11, labelAi: false, autoPrices: false, sbProducts: 0, sbUpdated: null, settings: { country: '', currency: 'EUR', tempUnit: 'C', formats: 'auto', paper: 'A4', sekRate: 11 }, settingsSaved: false };
   var COUNTRY_LIST = null;
   function browserLocale() { try { return (navigator.languages && navigator.languages[0]) || navigator.language || 'en'; } catch (e) { return 'en'; } }
   function applyLocale() {
@@ -1630,6 +1630,8 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
     if (!ocrState.ready) ocrState.ready = (demoMode ? Promise.resolve(false) : fetch(base + 'vendor/ready.json').then(function (r) { return r.ok ? r.json() : null; }).then(function (j) { if (j && j.langs && j.langs.length) { ocrState.langs = j.langs; return true; } return false; }).catch(function () { return false; }));
     return ocrState.ready;
   }
+  function labelAiOn() { return !demoMode && !!cfg.labelAi; }
+  function labelReadable() { return labelAiOn() ? Promise.resolve(true) : ocrAvailable(); }
   function loadScript(src) {
     return new Promise(function (resolve, reject) { if (window.Tesseract) return resolve(); var s = document.createElement('script'); s.src = src; s.onload = resolve; s.onerror = function () { reject(new Error('Could not load the label reader')); }; document.head.appendChild(s); });
   }
@@ -1699,7 +1701,7 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
     var ocrBox = h('div', { 'class': 'f' }), readBtn = h('button', { type: 'button', 'class': 'btn', text: 'Read the label', hidden: true, onclick: function () { if (photoBlob) readLabel(photoBlob); } });
     function takeFile(f) {
       photoErr.textContent = '';
-      shrink(f, 1600).then(function (b) { photoBlob = b; showPrev(URL.createObjectURL(b)); if (foundChk) { foundChk.checked = false; useFound = false; } ocrAvailable().then(function (ok) { readBtn.hidden = !ok; if (ok && adding && !ex) readLabel(b); }); })
+      shrink(f, 1600).then(function (b) { photoBlob = b; showPrev(URL.createObjectURL(b)); if (foundChk) { foundChk.checked = false; useFound = false; } labelReadable().then(function (ok) { readBtn.hidden = !ok; if (ok && adding && !ex) readLabel(b); }); })
         .catch(function (e) { photoErr.textContent = e.message; });
     }
     fileIn.addEventListener('change', function () { var f = fileIn.files[0]; fileIn.value = ''; if (f) takeFile(f); });
@@ -1768,7 +1770,49 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
     /* label photo: read the text on the device and fill in what it finds */
     var lastField = null;
     body.addEventListener('focusin', function (e) { var t = e.target; if (t.tagName === 'INPUT' && ['text', ''].indexOf(t.getAttribute('type') || '') >= 0 && t.id && t.id.indexOf('f_') === 0) lastField = t; });
+    function findOwned(f) {
+      if (!f.producer || !f.vintage) return [];
+      var fp = fold(f.producer).trim(), fy = String(f.vintage);
+      var c = rows.filter(function (r) { return fold(r.producer).trim() === fp && String(r.vint) === fy; });
+      if (c.length > 1 && f.cuvee) {
+        var fc = fold(f.cuvee).trim(), n = c.filter(function (r) { var rn = fold(r.name).trim(); return rn && (rn.indexOf(fc) >= 0 || fc.indexOf(rn) >= 0); });
+        if (n.length) c = n;
+      }
+      return c.slice(0, 3);
+    }
+    function readLabelAI(blob) {
+      ocrBox.replaceChildren(h('p', { 'class': 'note', text: 'Reading the label with Gemini… the photo is sent to Google. This takes a few seconds.' }));
+      return api('POST', 'api/label', null, blob, 'image/jpeg').then(function (d) {
+        var f = d.fields || {}, got = [];
+        if (f.producer && setIfEmpty(P[1], f.producer)) got.push('producer');
+        if (f.cuvee && setIfEmpty(W[1], f.cuvee)) got.push('wine name');
+        if (f.vintage === 'NV') { if (!nv && !yearIn.value) { nvBtn.click(); got.push('vintage'); } }
+        else if (f.vintage && !nv && !yearIn.value) { yearIn.value = f.vintage; got.push('vintage'); }
+        if (f.appellation && setIfEmpty(A[1], f.appellation)) got.push('appellation');
+        if (f.region && setIfEmpty(R[1], f.region)) got.push('region');
+        if (f.country && setIfEmpty(C[1], f.country)) got.push('country');
+        if (f.varietal && setIfEmpty(G[1], f.varietal)) got.push('grape');
+        if (f.color && !segDirty.color) { setSeg(colorSeg, f.color); got.push('colour'); }
+        if (f.style && !segDirty.style) { setSeg(styleSeg, f.style); got.push('style'); }
+        applyKnown(); suggestWindow();
+        var owned = adding && !ex ? findOwned(f) : [];
+        ocrBox.replaceChildren(h('div', { 'class': 'card', style: 'box-shadow:none;background:var(--fill)' },
+          h('div', { 'class': 'prod', text: got.length ? 'Read from the label: ' + got.join(', ') : 'Could not pick out any details' }),
+          h('p', { 'class': 'sm', text: 'Please check the fields below. The reading can be wrong.' }),
+          owned.length ? h('div', { 'class': 'f' }, h('p', { 'class': 'note', text: 'You already have this wine:' }),
+            h('div', { 'class': 'pick' }, owned.map(function (r) { return h('button', { type: 'button', 'class': 'btn', text: 'Add a bottle to ' + vlabel(r) + ' ' + (r.name || r.producer) + ' (' + fmtN(r.qty) + ' now)', onclick: function () { openWineForm(null, { existing: r }); } }); }))) : null));
+      });
+    }
     function readLabel(blob) {
+      if (!labelAiOn()) return readLabelOCR(blob);
+      return readLabelAI(blob).catch(function (e) {
+        return ocrAvailable().then(function (ok) {
+          if (!ok) { ocrBox.replaceChildren(h('p', { 'class': 'err', text: 'Could not read the label with Gemini: ' + e.message + ' The photo is still added, fill in the details by hand.' })); return; }
+          return readLabelOCR(blob).then(function () { ocrBox.insertBefore(h('p', { 'class': 'note', text: 'Gemini was not available (' + e.message + ') so the label was read on this device instead.' }), ocrBox.firstChild); });
+        });
+      });
+    }
+    function readLabelOCR(blob) {
       ocrBox.replaceChildren(h('p', { 'class': 'note', id: 'ocrStatus', text: 'Reading the label… this takes a few seconds.' }));
       var st = ocrBox.firstChild;
       return ocrRead(blob, function (m) { if (m && m.status) st.textContent = 'Reading the label… ' + (m.status === 'recognizing text' ? Math.round((m.progress || 0) * 100) + '%' : m.status); }).then(function (text) {
@@ -1789,7 +1833,7 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
     }
     if (pre.labelBlob) {
       photoBlob = pre.labelBlob; showPrev(URL.createObjectURL(pre.labelBlob));
-      ocrAvailable().then(function (ok) {
+      labelReadable().then(function (ok) {
         readBtn.hidden = !ok;
         if (ok) readLabel(pre.labelBlob);
         else ocrBox.replaceChildren(h('p', { 'class': 'note', text: 'The photo is added as the wine picture. Reading text from photos is not installed in this build of the add-on, so fill in the details by hand. On an iPhone or Mac you can tap a field and choose Scan Text to read the label with the system camera.' }));

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.15.0
+- **Read labels with Gemini (optional):** add your own free Gemini API key in the add-on's Configuration tab (*Gemini API key*) and photographing a label fills in producer, wine name, vintage, colour, style, country, region, appellation and grape. If you already have that wine and vintage, the form offers **Add a bottle to it**. It is off until you add a key. The label photo is sent to Google when it is on. If Gemini is unavailable, the on-device reader is used as before.
+- The add-on options now have names and short explanations in the Configuration tab.
+
 ## 0.14.0
 - **New look:** a light, quiet design. Wine cards have a tinted bottle picture on the left, the bottle count and prices in a clean number font, and a thin drinking-window line.
 - **New navigation:** a bar along the bottom on a phone (Cellar, Drink, a round **+** to add a wine, Stats, More) and a slim bar down the left side on a landscape screen such as a wall tablet in Home Assistant. *Drink* shows the wines that are ready to drink now.

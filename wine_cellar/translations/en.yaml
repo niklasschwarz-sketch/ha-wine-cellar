@@ -1,0 +1,18 @@
+configuration:
+  label_ai_key:
+    name: Gemini API key (optional)
+    description: >-
+      Reads wine label photos with Google Gemini and fills in the form. Paste your own free key from
+      https://aistudio.google.com/apikey. Leave empty to keep this off. When it is on, the label photo is sent to Google.
+  label_ai_model:
+    name: Gemini model
+    description: The Gemini model used to read labels. The default works with the free tier. Only change it if Google retires that model.
+  auto_images:
+    name: Look up pictures online
+    description: Ask Open Food Facts (a free, open database) for a picture of each wine in stock.
+  systembolaget_prices:
+    name: Systembolaget prices
+    description: Download Systembolaget's public price list once a week and match it to your wines. Off by default.
+  eur_sek_rate:
+    name: EUR to SEK rate
+    description: Used to turn Systembolaget prices into your currency when you choose Use as current value.

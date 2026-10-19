@@ -28,7 +28,8 @@ DB = os.path.join(TMP, "sub", "winecellar.db")  # the sub folder must be created
 MOCK_PORT = PORT + 1
 ENV = dict(os.environ, DB_TYPE="sqlite", SQLITE_PATH=DB, PORT=str(PORT), AUTO_IMAGES="0", AUTO_PRICES="0",
            HA_API="http://127.0.0.1:%d/api" % MOCK_PORT, SUPERVISOR_TOKEN="test-token", CLIMATE_CHECK_SECS="1", CLIMATE_RENOTIFY_SECS="3600",
-           CLIMATE_TEMP_ENTITY="sensor.cellar_temp", CLIMATE_HUMIDITY_ENTITY="sensor.cellar_humidity", HUMIDITY_MIN="60", HUMIDITY_MAX="75")
+           CLIMATE_TEMP_ENTITY="sensor.cellar_temp", CLIMATE_HUMIDITY_ENTITY="sensor.cellar_humidity", HUMIDITY_MIN="60", HUMIDITY_MAX="75",
+           LABEL_AI_KEY="test-gemini-key", LABEL_AI_MODEL="gemini-test", LABEL_AI_BASE="http://127.0.0.1:%d" % (MOCK_PORT + 1))
 
 # A tiny stand-in for the Home Assistant API: two sensors, one fine and one too dry.
 import http.server
@@ -80,6 +81,47 @@ class MockHA(http.server.BaseHTTPRequestHandler):
 
 mock = http.server.ThreadingHTTPServer(("127.0.0.1", MOCK_PORT), MockHA)
 threading.Thread(target=mock.serve_forever, daemon=True).start()
+
+# A stand-in for Gemini: records what it was sent and answers from the photo's content.
+GEMINI_SEEN = []
+
+
+class MockGemini(http.server.BaseHTTPRequestHandler):
+    def log_message(self, *a):
+        pass
+
+    def do_POST(self):
+        import base64 as b64
+        n = int(self.headers.get("Content-Length") or 0)
+        req = json.loads(self.rfile.read(n).decode() or "{}")
+        parts = req["contents"][0]["parts"]
+        img = parts[1]["inline_data"]
+        pic = b64.b64decode(img["data"])
+        GEMINI_SEEN.append({"path": self.path, "key": self.headers.get("x-goog-api-key"), "mime": img["mime_type"], "pic": pic,
+                            "mimetype": req["generationConfig"].get("responseMimeType"), "prompt": parts[0]["text"]})
+        status, out = 200, None
+        if b"LIMIT" in pic:
+            status, out = 429, {"error": {"message": "quota"}}
+        elif b"BADKEY" in pic:
+            status, out = 400, {"error": {"message": "API key not valid"}}
+        elif b"BLOCK" in pic:
+            out = {"candidates": [], "promptFeedback": {"blockReason": "OTHER"}}
+        elif b"GARBAGE" in pic:
+            out = {"candidates": [{"content": {"parts": [{"text": "I cannot help with that"}]}}]}
+        else:
+            ans = {"producer": "Domaine Test", "cuvee": "Les Essais", "vintage": "2019", "color": "rose", "style": "dry", "country": "France",
+                   "region": "null", "appellation": "Gevrey-Chambertin", "grape": "Pinot Noir", "extra": "ignored"}
+            out = {"candidates": [{"content": {"parts": [{"text": "```json\n" + json.dumps(ans) + "\n```"}]}}]}
+        data = json.dumps(out).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+
+gemini = http.server.ThreadingHTTPServer(("127.0.0.1", MOCK_PORT + 1), MockGemini)
+threading.Thread(target=gemini.serve_forever, daemon=True).start()
 
 fails = []
 proc = None
@@ -483,6 +525,31 @@ try:
     bk = call("GET", "/api/backup.json")[1]
     check("the full copy says which wines have pictures", {w["id"]: w["picture"] for w in bk["wines"]}.get(wa["id"]) == "web", [w.get("picture") for w in bk["wines"]][:3])
 
+    # ---- label photo read by Gemini
+    check("config says label reading is on", call("GET", "/api/config")[1].get("labelAi") is True)
+    JPG = b"\xff\xd8\xff\xe0" + b"label photo " * 8
+    n_before = len(wines())
+    s, d = call("POST", "/api/label", raw=JPG)
+    f = d["fields"] if s == 200 else {}
+    check("label photo is read", s == 200 and f.get("producer") == "Domaine Test" and f.get("cuvee") == "Les Essais" and f.get("vintage") == 2019
+          and f.get("color") == "Rosé" and f.get("style") == "Dry" and f.get("country") == "France" and f.get("region") == ""
+          and f.get("appellation") == "Gevrey-Chambertin" and f.get("varietal") == "Pinot Noir" and "extra" not in f, d)
+    seen = GEMINI_SEEN[-1]
+    check("Gemini gets the key in a header, the model in the path and the exact photo",
+          seen["key"] == "test-gemini-key" and seen["path"] == "/v1beta/models/gemini-test:generateContent" and seen["mime"] == "image/jpeg"
+          and seen["pic"] == JPG and seen["mimetype"] == "application/json" and "producer" in seen["prompt"], seen)
+    s, d = call("POST", "/api/label", raw=b"just text")
+    check("a non-picture is refused and never sent", s == 400 and len(GEMINI_SEEN) == 1, (s, d))
+    s, d = call("POST", "/api/label", raw=JPG + b"LIMIT")
+    check("free limit gives a clear 429", s == 429 and "limit" in d["error"].lower(), (s, d))
+    s, d = call("POST", "/api/label", raw=JPG + b"BADKEY")
+    check("a rejected key points at the options", s == 502 and "API key" in d["error"] and "test-gemini-key" not in json.dumps(d), (s, d))
+    s, d = call("POST", "/api/label", raw=JPG + b"BLOCK")
+    check("a blocked picture is explained", s == 422, (s, d))
+    s, d = call("POST", "/api/label", raw=JPG + b"GARBAGE")
+    check("an unreadable answer is a clean error", s == 502 and "understood" in d["error"], (s, d))
+    check("label reading adds nothing to the cellar", len(wines()) == n_before and call("GET", "/api/label")[0] == 404)
+
     # ---- page and unknown paths
     with urllib.request.urlopen(BASE + "/", timeout=5) as r:
         html = r.read().decode()
@@ -491,6 +558,7 @@ try:
 finally:
     stop()
     mock.shutdown()
+    gemini.shutdown()
 
 print()
 if fails:

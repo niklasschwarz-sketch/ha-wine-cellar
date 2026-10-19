@@ -22,7 +22,8 @@ BASE = "http://127.0.0.1:%d" % PORT
 TMP = tempfile.mkdtemp(prefix="winecellar-ui-")
 MOCK_PORT = PORT + 1
 ENV = dict(os.environ, DB_TYPE="sqlite", SQLITE_PATH=os.path.join(TMP, "w.db"), PORT=str(PORT), AUTO_IMAGES="0", AUTO_PRICES="0",
-           HA_API="http://127.0.0.1:%d/api" % MOCK_PORT, SUPERVISOR_TOKEN="t", CLIMATE_TEMP_ENTITY="sensor.t", CLIMATE_HUMIDITY_ENTITY="sensor.h")
+           HA_API="http://127.0.0.1:%d/api" % MOCK_PORT, SUPERVISOR_TOKEN="t", CLIMATE_TEMP_ENTITY="sensor.t", CLIMATE_HUMIDITY_ENTITY="sensor.h",
+           LABEL_AI_KEY="test-gemini-key", LABEL_AI_MODEL="gemini-test", LABEL_AI_BASE="http://127.0.0.1:%d" % (MOCK_PORT + 1))
 
 import http.server
 import threading
@@ -66,6 +67,36 @@ class MockHA(http.server.BaseHTTPRequestHandler):
 
 mock = http.server.ThreadingHTTPServer(("127.0.0.1", MOCK_PORT), MockHA)
 threading.Thread(target=mock.serve_forever, daemon=True).start()
+
+# A stand-in for Gemini. GEMINI_MODE says whether it answers or hits the free limit.
+GEMINI_MODE = ["ok"]
+GEMINI_CALLS = []
+
+
+class MockGemini(http.server.BaseHTTPRequestHandler):
+    def log_message(self, *a):
+        pass
+
+    def do_POST(self):
+        n = int(self.headers.get("Content-Length") or 0)
+        self.rfile.read(n)
+        GEMINI_CALLS.append(self.path)
+        if GEMINI_MODE[0] == "limit":
+            status, out = 429, {"error": {"message": "quota"}}
+        else:
+            ans = {"producer": "Domaine Test", "cuvee": "Les Essais", "vintage": 2019, "color": "Red", "style": "Dry", "country": "France",
+                   "region": None, "appellation": "Gevrey-Chambertin", "grape": "Pinot Noir"}
+            status, out = 200, {"candidates": [{"content": {"parts": [{"text": json.dumps(ans)}]}}]}
+        data = json.dumps(out).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+
+gemini = http.server.ThreadingHTTPServer(("127.0.0.1", MOCK_PORT + 1), MockGemini)
+threading.Thread(target=gemini.serve_forever, daemon=True).start()
 
 # Reads a Code 128 bit string back into text: start code, symbols, checksum and stop must all be right.
 def decode128(bits, table):
@@ -444,9 +475,47 @@ try:
         page.keyboard.press("Escape")
         api("PUT", "/api/settings", {"places": False})
 
+        # ---- label photo read by Gemini
+        owned = api("POST", "/api/wines", {"producer": "Domaine Test", "wine": "Domaine Test Gevrey-Chambertin Les Essais", "vintage": 2019, "color": "Red", "quantity": 2})
+        page.reload()
+        page.wait_for_selector("button.pic")
+        PNG_FILE = {"name": "label.png", "mimeType": "image/png", "buffer": __import__("base64").b64decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")}
+        GEMINI_CALLS.clear()
+        page.click("#scanBtn")
+        page.wait_for_selector("dialog[open] button:has-text('Photograph the label')")
+        page.set_input_files("dialog[open] input[type=file]", PNG_FILE)
+        page.wait_for_selector("dialog[open] #f_producer")
+        page.wait_for_function("() => document.querySelector('#f_producer').value === 'Domaine Test'", timeout=10000)
+        check("Gemini fills in the form from the label photo", page.input_value("#f_producer") == "Domaine Test" and page.input_value("#f_cuvee") == "Les Essais"
+              and page.input_value("#f_vintage") == "2019" and page.input_value("#f_appellation") == "Gevrey-Chambertin"
+              and page.input_value("#f_varietal") == "Pinot Noir" and page.input_value("#f_country") == "France" and page.input_value("#f_region") == "",
+              [page.input_value("#f_" + k) for k in ("producer", "cuvee", "vintage", "appellation", "varietal", "country", "region")])
+        check("the page says what it read", "Read from the label" in page.locator("dialog[open] .card").first.inner_text())
+        check("the label photo went to Gemini once", len(GEMINI_CALLS) == 1 and GEMINI_CALLS[0] == "/v1beta/models/gemini-test:generateContent", GEMINI_CALLS)
+        offer = page.locator("dialog[open] button:has-text('Add a bottle to')")
+        check("a wine you already own is offered", offer.count() == 1 and "2 now" in offer.first.inner_text(), offer.all_inner_texts())
+        offer.first.click()
+        page.wait_for_selector("dialog[open] .card:has-text('in the cellar now')")
+        check("the offer opens the form to add a bottle to that wine", "Domaine Test" in page.locator("dialog[open] .card").first.inner_text())
+        page.keyboard.press("Escape")
+
+        # a new wine: nothing to offer, and when the free limit is hit the form says so
+        GEMINI_MODE[0] = "limit"
+        page.click("#scanBtn")
+        page.wait_for_selector("dialog[open] button:has-text('Photograph the label')")
+        page.set_input_files("dialog[open] input[type=file]", PNG_FILE)
+        page.wait_for_selector("dialog[open] #f_producer")
+        page.wait_for_selector("dialog[open] .err:has-text('free limit')", timeout=10000)
+        check("when Gemini is out of free calls the form says so and stays usable", page.input_value("#f_producer") == "" and page.locator("dialog[open] #f_cuvee").count() == 1)
+        page.keyboard.press("Escape")
+        GEMINI_MODE[0] = "ok"
+        api("DELETE", "/api/wines/%d" % owned["id"])
+
         check("no script errors", errors == [], errors)
         browser.close()
 finally:
+    gemini.shutdown()
     mock.shutdown()
     proc.terminate()
     proc.wait(timeout=10)
