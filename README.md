@@ -1,5 +1,7 @@
 # Wine Cellar for Home Assistant
 
+**Your cellar, your data.** This project exists because I did not want to hand my wine collection to someone else's service. Wine Cellar keeps everything on your own Home Assistant, in one file you can back up, export or delete whenever you like.
+
 A wine cellar app that runs inside Home Assistant. Add, drink and move bottles, see what is ready to drink, scan barcodes and labels, get dinner pairings, watch your cellar's temperature and humidity, and get a weekly reminder about bottles to drink. No account, no cloud, no database server: your cellar is one file inside the add-on and is part of normal Home Assistant backups.
 
 <p>
@@ -11,7 +13,18 @@ A wine cellar app that runs inside Home Assistant. Add, drink and move bottles, 
 <img src="docs/screenshots/wall-tablet-dark.png" width="700" alt="The cellar on a wall tablet in dark mode">
 </p>
 
+<p>
+<img src="docs/screenshots/cellar-swedish-phone.png" width="230" alt="The cellar in Swedish">
+</p>
+
 (The screenshots use made-up wines.)
+
+## Your data stays yours
+- **Nothing is stored anywhere else.** Your cellar is one database file inside the add-on, on your own Home Assistant. There is no account, no cloud service and no company holding your collection.
+- **No tracking.** No analytics, no telemetry, no adverts.
+- **You can always leave.** Export everything at any time as a CSV (CellarTracker's format) or a full JSON copy with pictures and history. Uninstall the add-on with its data and it is gone.
+- **Any connection to the internet is optional and explained.** Out of the box the add-on only asks Open Food Facts for bottle pictures, and you can switch that off. Systembolaget prices and Gemini label reading are off until you turn them on, and Gemini uses your own key. See [what leaves your home](wine_cellar/DOCS.md).
+- **Open source (Apache 2.0)**, so you can read exactly what it does.
 
 ## Features
 - **Your cellar:** bottles, vintages, drinking windows, prices and values, several storage places (fridges, cellar, bar), gift and occasion tags, scores and reviews. Import and export CellarTracker CSV; full backup and restore.
