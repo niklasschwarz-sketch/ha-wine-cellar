@@ -566,7 +566,6 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
       <button id="pairBtn" role="menuitem" type="button" title="Pick a dish and see which of your bottles go with it">Dinner pairing</button>
       <button id="settingsBtn" role="menuitem" type="button" title="Country, currency, temperature unit, number and date format, paper size">Settings</button>
       <button id="climateBtn" role="menuitem" type="button" title="Choose the cellar temperature and humidity sensors and the alarm limits">Cellar climate</button>
-      <button id="appearBtn" role="menuitem" type="button" title="Light or dark, and the size of the text">Appearance</button>
       <button id="alertsBtn" role="menuitem" type="button" title="A weekly message about bottles to drink, and sensors for Home Assistant">Alerts and sensors</button>
       <button id="labelBtn" role="menuitem" type="button" title="Print barcode labels for your bottles">Bottle labels</button>
       <button id="importBtn" role="menuitem" type="button" title="Export your cellar, or import a CSV">Import / export</button>
@@ -1551,7 +1550,10 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
       var fld = function (t, n) { return h('div', { 'class': 'f', style: 'gap:6px' }, h('div', { 'class': 'lab', text: t }), n); };
       openSheet('Settings', h('div', { 'class': 'f', style: 'gap:14px' },
         h('p', { 'class': 'note', text: first ? 'Welcome. Choose where you live so prices, dates and units look right. You can change this later under More, Settings.' : 'Choose where you live. Picking a country suggests the currency, units and paper size, and you can still change each one.' }),
-        fld('Country', country), fld('Currency', currency), convBox, sekBox, fld('Temperature unit', unit), fld('Numbers and dates', fm), fld('Paper size for printing', paper), plBox, msg), [save]);
+        fld('Country', country), fld('Currency', currency), convBox, sekBox, fld('Temperature unit', unit), fld('Numbers and dates', fm), fld('Paper size for printing', paper), plBox,
+        h('div', { 'class': 'f' }, h('div', { 'class': 'lab', text: 'On this device' }),
+          h('div', { 'class': 'row' }, h('button', { type: 'button', 'class': 'btn', text: 'Appearance…', onclick: openAppearance }), h('button', { type: 'button', 'class': 'btn', text: 'Customise the menu…', onclick: openNavEditor })),
+          h('p', { 'class': 'note', text: 'Light or dark, text size, and which options sit in the bottom bar. These are kept in this browser only.' })), msg), [save]);
     }).catch(function (e) { toast(e.message); });
   }
   function openClimateSettings() {
@@ -2251,9 +2253,7 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
     { id: 'imp', label: 'Import', long: 'Import / export', src: 'importBtn' },
     { id: 'climate', label: 'Climate', long: 'Cellar climate', src: 'climateBtn' },
     { id: 'alerts', label: 'Alerts', long: 'Alerts and sensors', src: 'alertsBtn' },
-    { id: 'look', label: 'Look', long: 'Appearance', src: 'appearBtn' },
-    { id: 'settings', label: 'Settings', long: 'Settings', src: 'settingsBtn' },
-    { id: 'layout', label: 'Menu', long: 'Customise this menu', ico: 'layout' }
+    { id: 'settings', label: 'Settings', long: 'Settings', src: 'settingsBtn' }
   ];
   var NAV_MAX_BAR = 3, NAV_DEFAULT_BAR = ['cellar', 'drink', 'stats'];
   var navById = {}; NAV.forEach(function (n) { navById[n.id] = n; });
@@ -2497,7 +2497,6 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
       group('Text size', 'wc_size', [['', 'Normal'], ['m', 'Large'], ['l', 'Wall display']]),
       h('p', { 'class': 'note', text: 'Automatic follows this device. The choice is kept in this browser only, so a wall tablet can differ from your phone.' })));
   }
-  $('appearBtn').addEventListener('click', openAppearance);
 
   /* ---------- drink alerts and Home Assistant sensors ---------- */
   function openAlertsSheet() {

@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.18.1
+- **Appearance and Customise the menu now live in Settings**, under *On this device*, instead of taking a place in the menu. The menu is shorter, and the left side of a wide screen no longer lists them.
+
 ## 0.18.0
 - **Your own menu.** *Customise this menu* (under More on a phone, or the Menu icon on a wide screen) lists every option. Drag the handle, or use the arrows, to put them in the order you like, and tick **Bar** for up to three that should sit in the phone's bottom bar. The rest stay under More.
 - **A wall tablet or any wide screen has no More button any more.** All options are listed down the left side, in your order, with an icon and a short name each.
