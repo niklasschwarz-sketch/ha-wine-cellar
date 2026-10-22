@@ -27,7 +27,7 @@ import drink  # noqa: E402
 import mqtt  # noqa: E402
 import pairing  # noqa: E402
 
-VERSION = "0.19.1"  # keep in step with wine_cellar/config.yaml (test_api.py checks it)
+VERSION = "0.19.2"  # keep in step with wine_cellar/config.yaml (test_api.py checks it)
 
 DB_TYPE = os.environ.get("DB_TYPE", "postgres")
 PORT = int(os.environ.get("PORT", "8099"))
@@ -2668,21 +2668,308 @@ def _gemini(url, body=None):
         return r.read(2 * 1024 * 1024)
 
 
-def newest_flash_model():
-    """Google retires models often. Ask which ones this key can use and take the newest plain Flash model."""
+def flash_models():
+    """Google retires models often. Ask which ones this key can use: plain Flash models newest first, then Flash-Lite."""
     try:
         data = json.loads(_gemini("%s/v1beta/models?pageSize=200" % LABEL_BASE).decode("utf-8"))
     except (urllib.error.URLError, OSError, ValueError):
-        return ""
-    best = None
+        return []
+    found = []
     for m in data.get("models") or []:
         name = str(m.get("name", "")).replace("models/", "")
-        ver = re.fullmatch(r"gemini-(\d+(?:\.\d+)?)-flash", name)
+        ver = re.fullmatch(r"gemini-(\d+(?:\.\d+)?)-flash(-lite)?", name)
         if ver and "generateContent" in (m.get("supportedGenerationMethods") or []):
-            cand = (float(ver.group(1)), name)
-            if best is None or cand > best:
-                best = cand
-    return best[1] if best else ""
+            found.append((1 if ver.group(2) else 0, -float(ver.group(1)), name))
+    return [n for _, _, n in sorted(found)]
+
+
+def newest_flash_model():
+    m = flash_models()
+    return m[0] if m else ""
+
+
+def last_failed(last):
+    return last[2] if last else []
+
+
+def read_label(blob):
+    if not LABEL_KEY:
+        raise ApiError(503, "Reading labels with Gemini is not set up. Add a Gemini API key in the add-on options.")
+    mime = sniff(blob or b"")
+    if not mime:
+        raise ApiError(400, "That is not a picture")
+    body = {
+        "contents": [{"parts": [{"text": LABEL_PROMPT}, {"inline_data": {"mime_type": mime, "data": base64.b64encode(blob).decode("ascii")}}]}],
+        "generationConfig": {"responseMimeType": "application/json", "temperature": 0},
+    }
+    with _label_lock:  # one photo at a time keeps us inside the free per-minute limit
+        first = _label_model[0] or LABEL_MODEL
+        queue = [first] if first else []
+        raw = None
+        last = None
+        tried = 0
+        while raw is None and tried < 6:
+            if not queue:
+                queue = [m for m in flash_models() if m not in last_failed(last)] if tried < 3 else []
+                if not queue:
+                    break
+            model = queue.pop(0)
+            tried += 1
+            try:
+                raw = _gemini("%s/v1beta/models/%s:generateContent" % (LABEL_BASE, model), body)
+                _label_model[0] = model
+            except urllib.error.HTTPError as e:
+                detail = ""
+                try:
+                    detail = e.read(600).decode("utf-8", "replace").replace(LABEL_KEY, "***")
+                except Exception:
+                    pass
+                detail = " ".join(detail.split())
+                log("Label reading: Gemini answered HTTP %d for %s %s" % (e.code, model, detail[:300]))
+                last = (e.code, model, (last[2] if last else []) + ([model] if e.code == 404 else []))
+                if e.code == 404:
+                    _label_model[0] = ""  # gone or not offered to this key: look for another
+                    continue
+                if e.code in (500, 503, 504):  # Google is busy: try the next model, then once more
+                    time.sleep(2)
+                    continue
+                if e.code == 429:
+                    raise ApiError(429, "Gemini's free limit was reached. Try again in a minute, or tomorrow if it keeps happening.")
+                if e.code in (400, 401, 403):
+                    raise ApiError(502, "Gemini did not accept the request (HTTP %d). Check the API key in the add-on options." % e.code)
+                raise ApiError(502, "Gemini had a problem (HTTP %d). Try again later." % e.code)
+            except (urllib.error.URLError, OSError, ValueError) as e:
+                log("Label reading: could not reach Gemini: %s" % type(e).__name__)
+                raise ApiError(502, "Could not reach Gemini. Check the internet connection of Home Assistant.")
+        if raw is None:
+            if last and last[0] == 404:
+                raise ApiError(502, "Gemini does not offer a usable model to this key. Check the API key in the add-on options.")
+            raise ApiError(503, "Gemini is busy right now (high demand at Google). Try again in a minute.")
+    try:
+        data = json.loads(raw.decode("utf-8"))
+    except ValueError:
+        raise NetError("not JSON")
+    del raw
+    rows = sb_rows_from_json(data)
+    del data
+    if len(rows) < 3:
+        raise NetError("no wines in file")
+    stamp = now()
+    for i in range(0, len(rows), 60):
+        chunk = rows[i:i + 60]
+        db.run(
+            "INSERT INTO wc_sb (product_number, producer, name, vintage, volume, price, seen) VALUES " + ", ".join(["(?, ?, ?, ?, ?, ?, ?)"] * len(chunk)) +
+            " ON CONFLICT (product_number) DO UPDATE SET producer = EXCLUDED.producer, name = EXCLUDED.name, vintage = EXCLUDED.vintage, "
+            "volume = EXCLUDED.volume, price = EXCLUDED.price, seen = EXCLUDED.seen",
+            [x for row in chunk for x in (row + (stamp,))],
+        )
+    db.run("DELETE FROM wc_sb WHERE seen < ?", (stamp,))
+    meta_set("sb_refreshed", stamp.isoformat())
+    with _sb_lock:
+        _sb_cache["rows"] = None
+    return len(rows)
+
+
+def sb_candidates():
+    with _sb_lock:
+        if _sb_cache["rows"] is None:
+            rows = db.run("SELECT * FROM wc_sb", fetch="all")
+            _sb_cache["rows"] = [dict(r, toks=set(tokens((r["producer"] or "") + " " + (r["name"] or "")))) for r in rows]
+        return _sb_cache["rows"]
+
+
+def wine_volume(w):
+    m = re.search(r"(\d+(?:[.,]\d+)?)\s*(ml|cl|l)\b", (w.get("size") or "").lower())
+    if not m:
+        return 750
+    v = float(m.group(1).replace(",", "."))
+    return int(round(v * {"ml": 1, "cl": 10, "l": 1000}[m.group(2)]))
+
+
+def match_sb(w, cands):
+    """Strict match: producer words, a wine-name word, same vintage and bottle size. Returns the cheapest fitting listing or None."""
+    ptoks_all = tokens(w["producer"])
+    ptoks = [t for t in ptoks_all if t not in STOP] or ptoks_all
+    rest = name_parts(w)[2]
+    vint = w.get("vintage") or None
+    vol = wine_volume(w)
+    best = None
+    for c in cands:
+        if not ptoks or not all(t in c["toks"] for t in ptoks):
+            continue
+        if not name_fits(w, c["toks"]):
+            continue
+        if c.get("volume") and c["volume"] != vol:
+            continue
+        cv = c.get("vintage")
+        if vint and cv and cv != vint:
+            continue
+        score = sum(1 for t in rest if t in c["toks"]) + (3 if (vint and cv == vint) else 0)
+        key = (score, -(c["price"] or 0))
+        if best is None or key > best[0]:
+            best = (key, c)
+    return best[1] if best else None
+
+
+def sb_debug(wid):
+    """Why a wine did or did not match: the listings that share its producer words, with the rule each one failed."""
+    w = get_wine(wid)
+    ptoks_all = tokens(w["producer"])
+    ptoks = [t for t in ptoks_all if t not in STOP] or ptoks_all
+    ppart, gen, rest = name_parts(w)
+    vint = w.get("vintage") or None
+    vol = wine_volume(w)
+    out = []
+    for c in sb_candidates():
+        if not ptoks or not all(t in c["toks"] for t in ptoks):
+            continue
+        why = []
+        if not name_fits(w, c["toks"]):
+            why.append("name")
+        if c.get("volume") and c["volume"] != vol:
+            why.append("volume %s vs %s" % (c["volume"], vol))
+        if vint and c.get("vintage") and c["vintage"] != vint:
+            why.append("vintage %s vs %s" % (c["vintage"], vint))
+        out.append({"number": c["product_number"], "name": c["name"], "producer": c["producer"], "vintage": c.get("vintage"), "volume": c.get("volume"), "price": c["price"], "rejected": why})
+    out.sort(key=lambda x: len(x["rejected"]))
+    return {"wine": label_of(w), "producerWords": ptoks, "nameWords": rest, "wineVolume": vol, "candidates": out[:15], "candidateCount": len(out), "listSize": len(sb_candidates())}
+
+
+def sb_check(wid):
+    w = get_wine(wid)
+    cands = sb_candidates()
+    if not cands:
+        raise ApiError(503, "Systembolaget's list has not been downloaded yet. It is fetched in the background, try again in a few minutes.")
+    c = match_sb(w, cands)
+    stamp = now()
+    if c:
+        old = db.run("SELECT price FROM wc_prices WHERE wine_id = ? AND status = 'ok'", (wid,), fetch="one")
+        db.run(
+            "INSERT INTO wc_prices (wine_id, source, price, product_number, name, vintage, volume, status, checked_at) VALUES (?, 'systembolaget', ?, ?, ?, ?, ?, 'ok', ?) "
+            "ON CONFLICT (wine_id) DO UPDATE SET source = EXCLUDED.source, price = EXCLUDED.price, product_number = EXCLUDED.product_number, name = EXCLUDED.name, "
+            "vintage = EXCLUDED.vintage, volume = EXCLUDED.volume, status = EXCLUDED.status, checked_at = EXCLUDED.checked_at",
+            (wid, c["price"], c["product_number"], c["name"], c.get("vintage"), c.get("volume"), stamp),
+        )
+        if not old or old["price"] != c["price"]:
+            db.run("INSERT INTO wc_price_log (wine_id, source, price, ts) VALUES (?, 'systembolaget', ?, ?)", (wid, c["price"], stamp))
+    else:
+        db.run(
+            "INSERT INTO wc_prices (wine_id, source, price, status, checked_at) VALUES (?, 'systembolaget', NULL, 'none', ?) "
+            "ON CONFLICT (wine_id) DO UPDATE SET price = NULL, product_number = NULL, name = NULL, status = 'none', checked_at = EXCLUDED.checked_at",
+            (wid, stamp),
+        )
+    return wine_json(get_wine(wid))
+
+
+price_wake = threading.Event()
+
+
+def price_worker():
+    time.sleep(float(os.environ.get("PRICE_DELAY", "40")))
+    while True:
+        wait = 3600
+        try:
+            if AUTO_PRICES:
+                last = meta_get("sb_refreshed")
+                try:
+                    age = (now() - datetime.fromisoformat(last)).total_seconds() if last else None
+                except ValueError:
+                    age = None
+                if age is None or age > 7 * 86400:
+                    n = sb_refresh()
+                    log("Systembolaget wine list updated: %d wines" % n)
+                    ids = db.run("SELECT id FROM wc_wines", fetch="all")
+                else:
+                    ids = db.run("SELECT w.id FROM wc_wines w LEFT JOIN wc_prices p ON p.wine_id = w.id WHERE p.wine_id IS NULL", fetch="all")
+                for r in ids:
+                    try:
+                        sb_check(r["id"])
+                    except ApiError:
+                        break
+        except NetError as e:
+            log("Systembolaget price update paused (%s). Trying again in an hour." % e)
+        except Exception as e:
+            log("Systembolaget price error:", type(e).__name__, str(e)[:160])
+        price_wake.wait(wait)
+        price_wake.clear()
+
+
+def app_config():
+    n = db.run("SELECT COUNT(*) AS n FROM wc_sb", fetch="one")["n"]
+    st, saved = app_settings()
+    return {"eurSek": st["sekRate"], "settings": st, "settingsSaved": saved, "autoPrices": AUTO_PRICES, "sbProducts": n, "sbUpdated": meta_get("sb_refreshed"), "labelAi": bool(LABEL_KEY)}
+
+
+# ---------------------------------------------------------------- label photo, read by Gemini
+LABEL_PROMPT = (
+    "You read the label of a wine bottle from a photo (front label, maybe the back label too). "
+    "Answer with one JSON object and nothing else, with exactly these keys: "
+    "producer, cuvee, vintage, color, style, country, region, appellation, grape. "
+    "Use null for anything that is not printed on the label or that you cannot tell. Never guess. "
+    "producer: the winery, estate or house name as printed. "
+    "cuvee: the wine's own name, vineyard or cuvee if printed; do not repeat the producer or the appellation in it. "
+    "vintage: the four-digit harvest year, or \"NV\" if the label says non-vintage; null if no year is shown. "
+    "color: Red, White or Rose. style: Dry, Off-dry, Sparkling or Sweet. "
+    "country: in English. region: the wine region, for example Burgundy or Rhone Valley. "
+    "appellation: as printed, for example Gevrey-Chambertin. "
+    "grape: the grape varieties printed on the label, separated by commas."
+)
+_label_lock = threading.Lock()
+
+
+def _lv(v, limit=150):
+    s = txt(v, limit)
+    return "" if s.lower() in ("null", "none", "n/a", "na", "-", "not shown", "unknown") else s
+
+
+def clean_label(d):
+    """Take only the fields we expect from the model's answer, trimmed to what the form accepts."""
+    out = {k: _lv(d.get(k)) for k in ("producer", "cuvee", "country", "region", "appellation")}
+    out["varietal"] = _lv(d.get("grape") or d.get("varietal"))
+    v = _lv(d.get("vintage"), 10)
+    if v.upper() == "NV":
+        out["vintage"] = "NV"
+    elif re.fullmatch(r"(19|20)\d\d", v) and int(v) <= datetime.now().year + 1:
+        out["vintage"] = int(v)
+    else:
+        out["vintage"] = ""
+    c = _lv(d.get("color"), 20).lower()
+    out["color"] = "Rosé" if c in ("rose", "rosé", "rosado", "rosato", "pink") else ("Red" if c == "red" else ("White" if c == "white" else ""))
+    s = _lv(d.get("style"), 20).lower()
+    out["style"] = next((x for x in STYLES if x.lower() == s), "")
+    return out
+
+
+_label_model = [""]  # a model found automatically, kept until the add-on restarts
+
+
+def _gemini(url, body=None):
+    headers = {"x-goog-api-key": LABEL_KEY, "User-Agent": USER_AGENT}
+    if body is not None:
+        headers["Content-Type"] = "application/json"
+    req = urllib.request.Request(url, data=json.dumps(body).encode("utf-8") if body is not None else None, method="POST" if body is not None else "GET", headers=headers)
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return r.read(2 * 1024 * 1024)
+
+
+def flash_models():
+    """Google retires models often. Ask which ones this key can use: plain Flash models newest first, then Flash-Lite."""
+    try:
+        data = json.loads(_gemini("%s/v1beta/models?pageSize=200" % LABEL_BASE).decode("utf-8"))
+    except (urllib.error.URLError, OSError, ValueError):
+        return []
+    found = []
+    for m in data.get("models") or []:
+        name = str(m.get("name", "")).replace("models/", "")
+        ver = re.fullmatch(r"gemini-(\d+(?:\.\d+)?)-flash(-lite)?", name)
+        if ver and "generateContent" in (m.get("supportedGenerationMethods") or []):
+            found.append((1 if ver.group(2) else 0, -float(ver.group(1)), name))
+    return [n for _, _, n in sorted(found)]
+
+
+def newest_flash_model():
+    m = flash_models()
+    return m[0] if m else ""
 
 
 def read_label(blob):
@@ -2721,8 +3008,6 @@ def read_label(blob):
                         continue
                 if e.code == 429:
                     raise ApiError(429, "Gemini's free limit was reached. Try again in a minute, or tomorrow if it keeps happening.")
-                if e.code in (401, 403, 404) and LABEL_KEY.startswith("AQ."):
-                    raise ApiError(502, "Google's newer AQ. keys are often refused by this kind of request (HTTP %d). Create a standard key instead: Google Cloud Console, APIs and services, Credentials, Create credentials, API key, restricted to the Generative Language API. It starts with AIza." % e.code)
                 if e.code == 404:
                     raise ApiError(502, "Gemini does not offer the model %s to this key. Clear the Gemini model option so the add-on picks a current one." % model)
                 if e.code in (400, 401, 403):

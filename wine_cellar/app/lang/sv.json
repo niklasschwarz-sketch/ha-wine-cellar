@@ -769,6 +769,7 @@
   "€{0} per bottle": "€{0} per flaska",
   "−{0} bottle": "−{0} flaska",
   "Try the on-device reading (often inaccurate)": "Prova läsning på enheten (ofta felaktig)",
-  "Google's newer AQ. keys are often refused by this kind of request (HTTP {0}). Create a standard key instead: Google Cloud Console, APIs and services, Credentials, Create credentials, API key, restricted to the Generative Language API. It starts with AIza.": "Googles nyare AQ.-nycklar nekas ofta av den här typen av anrop (HTTP {0}). Skapa istället en vanlig nyckel: Google Cloud Console, APIs och tjänster, Autentiseringsuppgifter, Skapa autentiseringsuppgifter, API-nyckel, begränsad till Generative Language API. Den börjar med AIza."
+  "Gemini is busy right now (high demand at Google). Try again in a minute.": "Gemini är upptaget just nu (hög belastning hos Google). Försök igen om en minut.",
+  "Gemini does not offer a usable model to this key. Check the API key in the add-on options.": "Gemini erbjuder ingen användbar modell för den här nyckeln. Kontrollera API-nyckeln i tilläggets alternativ."
  }
 }

@@ -1,7 +1,7 @@
 # Changelog
 
-## 0.19.1
-- **Label reading.** When Gemini refuses a Google `AQ.` key, the app now explains it and how to create a standard `AIza` key, instead of silently showing garbled on-device text. The on-device reading is now an opt-in button.
+## 0.19.2
+- **Label reading is more robust.** If Google retires the chosen Gemini model (404) or is busy (503 high demand), the add-on now tries the other current Flash models and Flash-Lite before giving up, and says clearly when Google is busy. The on-device reading is an opt-in button instead of garbled text appearing on its own.
 
 ## 0.19.0
 - **Swedish.** Settings, *On this device*, *Language*: Automatic (follows your browser), English or Svenska. The whole app is translated, including the dinner pairing suggestions, notices and error messages. Wine names, producers and your own notes are never changed. The choice is kept per browser.

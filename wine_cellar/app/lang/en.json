@@ -770,6 +770,7 @@
   "€{0} per bottle": "€{0} per bottle",
   "−{0} bottle": "−{0} bottle",
   "Try the on-device reading (often inaccurate)": "Try the on-device reading (often inaccurate)",
-  "Google's newer AQ. keys are often refused by this kind of request (HTTP {0}). Create a standard key instead: Google Cloud Console, APIs and services, Credentials, Create credentials, API key, restricted to the Generative Language API. It starts with AIza.": "Google's newer AQ. keys are often refused by this kind of request (HTTP {0}). Create a standard key instead: Google Cloud Console, APIs and services, Credentials, Create credentials, API key, restricted to the Generative Language API. It starts with AIza."
+  "Gemini is busy right now (high demand at Google). Try again in a minute.": "Gemini is busy right now (high demand at Google). Try again in a minute.",
+  "Gemini does not offer a usable model to this key. Check the API key in the add-on options.": "Gemini does not offer a usable model to this key. Check the API key in the add-on options."
  }
 }
