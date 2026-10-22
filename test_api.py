@@ -687,7 +687,7 @@ try:
 
     # ---- full copy, with pictures, and restore
     bk = call("GET", "/api/backup.json")[1]
-    check("the full copy carries version, settings and drink alert settings", bk["version"] == "0.18.1" and bk["picturesIncluded"] is True and bk["settings"]["alerts"]["weekday"] == 2, (bk.get("version"), bk.get("settings")))
+    check("the full copy carries version, settings and drink alert settings", bk["version"] == "0.18.2" and bk["picturesIncluded"] is True and bk["settings"]["alerts"]["weekday"] == 2, (bk.get("version"), bk.get("settings")))
     withpic = [w for w in bk["wines"] if w.get("pictureData")]
     check("pictures travel inside the full copy", len(withpic) >= 1 and withpic[0].get("pictureMime"), len(withpic))
     small = call("GET", "/api/backup.json?pictures=0")[1]

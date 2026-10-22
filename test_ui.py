@@ -525,6 +525,7 @@ try:
         check("a wine card shows its status word next to the drinking window", any(w in wine_text for w in ("Ready", "Hold", "Past peak", "No window")), wine_text)
 
         # ---- the menu: a phone bar with a few favourites and More, a rail that lists everything, and an editor
+        api("POST", "/api/wines", {"producer": "Drink Test", "wine": "Ready", "vintage": 2018, "color": "Red", "quantity": 2, "begin": 2020, "end": 2035})
         ph = browser.new_page(viewport={"width": 390, "height": 844}, has_touch=True)
         ph.on("pageerror", lambda e: errors.append(str(e)))
         ph.goto(BASE + "/")
@@ -550,9 +551,12 @@ try:
         check("the bar follows the choice", vis("#dk_table") and not vis("#dkDrink") and vis("#dkStats"))
         ph.click("#moreBtn")
         names = ph.locator("#moreMenu button:visible").all_inner_texts()
-        check("what left the bar is now under More", "Drink: wines ready now" in names and "Edit table" not in names, names)
-        ph.click("#moreMenu button:has-text('Drink: wines ready now')")
-        check("a menu entry does what the bar button did", ph.locator("#dkDrink.on").count() == 1)
+        check("what left the bar is now under More", "Drink now" in names and "Edit table" not in names, names)
+        ph.click("#moreMenu button:has-text('Drink now')")
+        check("the Drink entry opens a pick list, most urgent first", ph.locator("dialog[open] .dnrow").count() >= 1 and ph.locator("dialog[open] .gl").first.inner_text() in ("Past their window", "Best this year", "Ready to drink"))
+        ph.locator("dialog[open] .dnrow").first.click()
+        check("picking a wine opens the Log it sheet", ph.locator("dialog[open] button:has-text('Log it')").count() == 1)
+        ph.keyboard.press("Escape")
         ph.reload()
         ph.wait_for_selector(".wine")
         check("the layout survives a reload", vis("#dk_table") and not vis("#dkDrink"))

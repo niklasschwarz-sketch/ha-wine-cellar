@@ -27,7 +27,7 @@ import drink  # noqa: E402
 import mqtt  # noqa: E402
 import pairing  # noqa: E402
 
-VERSION = "0.18.1"  # keep in step with wine_cellar/config.yaml (test_api.py checks it)
+VERSION = "0.18.2"  # keep in step with wine_cellar/config.yaml (test_api.py checks it)
 
 DB_TYPE = os.environ.get("DB_TYPE", "postgres")
 PORT = int(os.environ.get("PORT", "8099"))

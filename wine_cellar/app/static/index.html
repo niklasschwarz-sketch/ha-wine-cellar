@@ -304,6 +304,12 @@ video.cam{width:100%;max-height:16rem;border-radius:var(--r-md);background:#000;
 .pl-row .nm{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.3;text-align:left}
 .pl-row .nm b{font-weight:600}
 
+/* drink now list */
+.dnlist{display:grid;gap:var(--sp-2)}
+.dnrow{appearance:none;display:flex;align-items:center;gap:var(--sp-3);width:100%;min-height:56px;padding:var(--sp-2) var(--sp-3);border:1px solid var(--divider);border-radius:var(--r-md);background:var(--surface);color:var(--text);text-align:left;cursor:pointer}
+.dnrow:hover{border-color:var(--outline)}
+.dnrow .dnn{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.3;overflow-wrap:anywhere}
+.dnrow .dnq{font-size:var(--fs-sm);color:var(--text-2);white-space:nowrap}
 /* the menu editor */
 .nvlist{display:grid;gap:var(--sp-2)}
 .nvrow{display:flex;align-items:center;gap:var(--sp-2);min-height:56px;padding:4px 8px;border:1px solid var(--divider);border-radius:var(--r-md);background:var(--surface)}
@@ -894,7 +900,7 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
   }
   function drawBar() {
     var nf = sum(Object.keys(DIM_LABEL), function (k) { return state[k].size; }) + (state.q ? 1 : 0); $('filtN').textContent = nf ? String(nf) : '';
-    var drinkOn = state.status.size === 1 && state.status.has('ready'); $('dkDrink').classList.toggle('on', drinkOn); document.body.classList.toggle('drinking', drinkOn); $('dkCellar').classList.toggle('on', !drinkOn);
+    var drinkOn = state.status.size === 1 && state.status.has('ready'); $('dkCellar').classList.toggle('on', true);
     var bar = $('bar'); bar.replaceChildren();
     var cur = sub(stock()), nB = sum(cur, function (r) { return r.qty; });
     $('sideHide').textContent = 'Show ' + fmtN(cur.length) + (cur.length === 1 ? ' wine' : ' wines');
@@ -1157,6 +1163,30 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
       btns.push(b); wrap.appendChild(b);
     })(i);
     paint(); return wrap;
+  }
+  /* the Drink button: pick a bottle to open, most urgent first */
+  function openDrinkMenu() {
+    var list = rows.filter(function (r) { return r.qty > 0 && (r.status === 'past' || r.status === 'ready'); });
+    var rank = function (r) { return r.status === 'past' ? 0 : r.e === YEAR ? 1 : 2; };
+    list.sort(function (a, b) { return rank(a) - rank(b) || (a.e || 9999) - (b.e || 9999) || b.qty - a.qty || a.producer.localeCompare(b.producer); });
+    var host = h('div', { 'class': 'dnlist' }), q = h('input', { 'class': 'in', type: 'search', placeholder: 'Search these wines', 'aria-label': 'Search wines to drink' });
+    var why = function (r) { return r.status === 'past' ? 'Past peak since ' + r.e : r.e === YEAR ? 'Best this year' : r.e ? 'Best by ' + r.e : 'Ready now'; };
+    function paint() {
+      var t = q.value.trim().toLowerCase(), shown = list.filter(function (r) { return !t || r.hay.indexOf(t) >= 0; });
+      host.replaceChildren();
+      if (!shown.length) { host.appendChild(h('p', { 'class': 'empty', text: list.length ? 'No wine matches.' : 'Nothing is ready to drink right now.' })); return; }
+      var last = -1;
+      shown.forEach(function (r) {
+        var k = rank(r);
+        if (k !== last) { last = k; host.appendChild(h('div', { 'class': 'gl', text: k === 0 ? 'Past their window' : k === 1 ? 'Best this year' : 'Ready to drink' })); }
+        var d = h('span', { 'class': 'dot' }); d.style.background = COLOR_HEX[r.color] || OTHER_HEX;
+        host.appendChild(h('button', { type: 'button', 'class': 'dnrow', onclick: function () { openDrinkSheet(r); }, 'aria-label': 'Open a bottle of ' + wineTitle(r) },
+          d, h('span', { 'class': 'dnn' }, h('b', { text: (r.name || r.producer) + ' ' + (r.vint === 'NV' ? 'NV' : r.vint) }), h('span', { 'class': 'sm', text: [r.name ? r.producer : '', why(r)].filter(Boolean).join(' · ') })),
+          h('span', { 'class': 'dnq', text: fmtN(r.qty) + (r.qty === 1 ? ' bottle' : ' bottles') })));
+      });
+    }
+    q.addEventListener('input', paint); paint();
+    openSheet('Drink now', h('div', { 'class': 'f', style: 'gap:10px' }, list.length > 6 ? q : null, h('p', { 'class': 'note', text: 'Pick a bottle to open. The most urgent wines are first.' }), host));
   }
   function openDrinkSheet(r, bottleId) {
     var rating = 0, note = h('textarea', { 'class': 'in', placeholder: 'Tasting note (optional)', 'aria-label': 'Tasting note', maxlength: 500 });
@@ -2243,7 +2273,7 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
   /* src: the button that already does the job (kept inside the More menu); none: the item is the dock button itself */
   var NAV = [
     { id: 'cellar', label: 'Cellar', long: 'Cellar', dock: 'dkCellar' },
-    { id: 'drink', label: 'Drink', long: 'Drink: wines ready now', dock: 'dkDrink' },
+    { id: 'drink', label: 'Drink', long: 'Drink now', dock: 'dkDrink' },
     { id: 'stats', label: 'Stats', long: 'Stats', dock: 'dkStats' },
     { id: 'places', label: 'Places', long: 'Storage places', src: 'placesBtn', ico: 'places' },
     { id: 'table', label: 'Table', long: 'Edit table', src: 'tableBtn' },
@@ -2341,7 +2371,7 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
   }
   buildNav();
   $('dkCellar').addEventListener('click', function () { if (dlg.open) dlg.close(); Object.keys(DIM_LABEL).forEach(function (k) { state[k].clear(); }); state.q = ''; $('q').value = ''; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
-  $('dkDrink').addEventListener('click', function () { showAll('status', 'ready'); });
+  $('dkDrink').addEventListener('click', openDrinkMenu);
   $('dkStats').addEventListener('click', openStats);
   function toggleSide() { layout.classList.toggle('side-off'); if (!layout.classList.contains('side-off') && window.innerWidth < 900) $('side').scrollIntoView({ block: 'nearest' }); }
   $('filtBtn').addEventListener('click', toggleSide); $('sideHide').addEventListener('click', toggleSide);

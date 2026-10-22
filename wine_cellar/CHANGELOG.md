@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.18.2
+- **Drink is now a pick list.** The Drink button opens *Drink now*: the wines past their window first, then those at their best this year, then everything else that is ready, each with its bottle count. Tap one to open a bottle and log it. A search box appears when the list is long. It no longer filters the main list.
+
 ## 0.18.1
 - **Appearance and Customise the menu now live in Settings**, under *On this device*, instead of taking a place in the menu. The menu is shorter, and the left side of a wide screen no longer lists them.
 
