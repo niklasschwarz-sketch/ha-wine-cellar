@@ -512,6 +512,29 @@ try:
         GEMINI_MODE[0] = "ok"
         api("DELETE", "/api/wines/%d" % owned["id"])
 
+        # ---- appearance: dark mode and text size are chosen in the page and kept in the browser
+        page.click("#moreBtn")
+        page.click("#appearBtn")
+        page.wait_for_selector("dialog[open]")
+        page.click("dialog[open] button:has-text('Dark')")
+        check("choosing Dark sets the theme and the page turns dark", page.evaluate("document.documentElement.dataset.theme") == "dark"
+              and page.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(20, 18, 17)", page.evaluate("getComputedStyle(document.body).backgroundColor"))
+        page.click("dialog[open] button:has-text('Wall display')")
+        check("Wall display makes the text and touch targets bigger", page.evaluate("getComputedStyle(document.documentElement).fontSize") == "20px"
+              and page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--hit').trim()") == "56px")
+        page.reload()
+        page.wait_for_selector(".wine")
+        check("the choice survives a reload", page.evaluate("document.documentElement.dataset.theme") == "dark" and page.evaluate("document.documentElement.dataset.size") == "l")
+        page.click("#moreBtn")
+        page.click("#appearBtn")
+        page.wait_for_selector("dialog[open]")
+        page.click("dialog[open] button:has-text('Automatic')")
+        page.click("dialog[open] button:has-text('Normal')")
+        check("Automatic and Normal go back to the device defaults", page.evaluate("document.documentElement.dataset.theme") is None and page.evaluate("document.documentElement.dataset.size") is None)
+        page.keyboard.press("Escape")
+        wine_text = page.locator(".wine").first.inner_text()
+        check("a wine card shows its status word next to the drinking window", any(w in wine_text for w in ("Ready", "Hold", "Past peak", "No window")), wine_text)
+
         check("no script errors", errors == [], errors)
         browser.close()
 finally:

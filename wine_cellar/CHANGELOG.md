@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.17.0
+- **New look, built on one set of design rules.** One colour, size, spacing and corner scale replaces dozens of one-off values, so every screen now matches. The accent is burgundy.
+- **Dark mode.** The app follows your device by default. *More, Appearance* lets you choose Light or Dark, and a larger text size (*Large*, *Wall display*) for a kitchen or wall tablet. The choice is kept in that browser only.
+- **Readable colours.** The status words (Ready, Hold, Past peak) and the grey text were too faint. They now meet the WCAG AA contrast level, and every status has an icon as well as a colour, so it does not rely on colour alone. The words are now the same everywhere: Ready, Hold, Past peak, No window.
+- **Visible controls.** Search boxes, chips, drop-downs and stars have a clear outline, and every tap target is at least 44 px (48 px on touch screens).
+- **Calmer wine cards.** The whole card opens the wine. The name and vintage lead, the bottle count is the biggest number, and the price is quiet. Region, grape and producer are plain text on the card; tap the card and use the links on the wine page to see all wines of one kind.
+- **Cleaner top of the list.** The sentence that repeated the numbers is gone, and Sort moved into Filters. On a phone, *Coming up* and *Drink soon* now show under the Drink tab instead of above the list.
+- **Phone sheets.** On a phone, dialogs slide up from the bottom. Filters open as a bottom sheet with a **Show N wines** button instead of pushing the list down. The Stats sheet no longer runs off the side of the screen.
+- Navigation has icons, and Stats is no longer listed twice.
+- Your data, settings and backups are unchanged.
+
 ## 0.16.0
 - **Weekly drink reminder:** *More, Alerts and sensors*. Pick a day and hour and Wine Cellar sends one message a week through Home Assistant (a phone notification, or a message inside Home Assistant) listing the bottles in the last year of their window and those already past it. Nothing is sent in a week when nothing needs attention. There is a **Send a test message** button.
 - **Cellar sensors in Home Assistant:** switch on *Show the cellar as sensors* and a Wine Cellar device appears with bottles, wines, ready to drink, drink this year, past peak, hold and estimated value (`sensor.wine_cellar_*`), for dashboards and automations. The names of the wines to drink soon or past peak are attached to those sensors. It needs the Mosquitto broker add-on and the MQTT integration; Wine Cellar finds the broker by itself. Switching it off removes the sensors again. After updating, restart the add-on once so Home Assistant can offer it the MQTT connection.
