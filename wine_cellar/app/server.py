@@ -2721,8 +2721,8 @@ def read_label(blob):
                         continue
                 if e.code == 429:
                     raise ApiError(429, "Gemini's free limit was reached. Try again in a minute, or tomorrow if it keeps happening.")
-                if e.code in (401, 403, 404) and not LABEL_KEY.startswith("AIza"):
-                    raise ApiError(502, "Gemini did not accept this key. Keys from Google AI Studio start with AIza; yours does not. Create one at aistudio.google.com/apikey and put it in the add-on options.")
+                if e.code in (401, 403, 404) and LABEL_KEY.startswith("AQ."):
+                    raise ApiError(502, "Google's newer AQ. keys are often refused by this kind of request (HTTP %d). Create a standard key instead: Google Cloud Console, APIs and services, Credentials, Create credentials, API key, restricted to the Generative Language API. It starts with AIza." % e.code)
                 if e.code == 404:
                     raise ApiError(502, "Gemini does not offer the model %s to this key. Clear the Gemini model option so the add-on picks a current one." % model)
                 if e.code in (400, 401, 403):

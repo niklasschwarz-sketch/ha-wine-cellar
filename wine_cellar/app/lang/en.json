@@ -769,7 +769,7 @@
   "{0}% of this selection": "{0}% of this selection",
   "€{0} per bottle": "€{0} per bottle",
   "−{0} bottle": "−{0} bottle",
-  "Gemini did not accept this key. Keys from Google AI Studio start with AIza; yours does not. Create one at aistudio.google.com/apikey and put it in the add-on options.": "Gemini did not accept this key. Keys from Google AI Studio start with AIza; yours does not. Create one at aistudio.google.com/apikey and put it in the add-on options.",
-  "Try the on-device reading (often inaccurate)": "Try the on-device reading (often inaccurate)"
+  "Try the on-device reading (often inaccurate)": "Try the on-device reading (often inaccurate)",
+  "Google's newer AQ. keys are often refused by this kind of request (HTTP {0}). Create a standard key instead: Google Cloud Console, APIs and services, Credentials, Create credentials, API key, restricted to the Generative Language API. It starts with AIza.": "Google's newer AQ. keys are often refused by this kind of request (HTTP {0}). Create a standard key instead: Google Cloud Console, APIs and services, Credentials, Create credentials, API key, restricted to the Generative Language API. It starts with AIza."
  }
 }
