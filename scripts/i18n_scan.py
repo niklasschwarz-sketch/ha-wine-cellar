@@ -3,6 +3,7 @@
 
     python3 scripts/i18n_scan.py            # prints the strings that are not in wine_cellar/app/lang/en.json
     python3 scripts/i18n_scan.py --raw      # prints everything it found
+    SCAN_LANG=sv python3 scripts/i18n_scan.py --raw    # prints the text still in English when the page is in Swedish
 
 Starts the real server on a temporary database with a few sample wines, opens the page with ?i18n=collect
 and clicks through the screens, then reads back the text the page collected. Needs Playwright with Chromium.
@@ -80,6 +81,9 @@ def run():
             b = pw.chromium.launch()
             for vp in ({"width": 1400, "height": 900}, {"width": 390, "height": 844}):
                 pg = b.new_page(viewport=vp)
+                lang = os.environ.get("SCAN_LANG", "")
+                if lang:
+                    pg.add_init_script("try { localStorage.setItem('wc_lang', '%s'); } catch (e) {}" % lang)
                 url = BASE + "/?i18n=collect&lang=en"
                 pg.goto(url)
                 pg.wait_for_selector(".card", timeout=10000)
@@ -151,5 +155,9 @@ if __name__ == "__main__":
     have = set()
     if os.path.exists(TEMPLATE) and "--raw" not in sys.argv:
         have = set(json.load(open(TEMPLATE, encoding="utf-8")).get("strings", {}))
+    sys.path.insert(0, HERE)
+    import i18n_keys
+    found = {i18n_keys.clean(s) for s in found}
+    found = {s for s in found if not i18n_keys.noise(s) and s not in i18n_keys.MONTH_ONLY}
     for s in sorted(found - have):
         print(s)

@@ -570,6 +570,28 @@ try:
         check("a wide screen lists all options down the side and has no More", wide.locator("#dock .dk.item:visible").count() >= 11 and not wide.locator("#moreBtn").is_visible())
         wide.close()
 
+        # ---- language: pick Swedish in Settings, the page reloads in Swedish and keeps it
+        lg = browser.new_page(viewport={"width": 1280, "height": 800})
+        lg.on("pageerror", lambda e: errors.append(str(e)))
+        lg.goto(BASE + "/")
+        lg.wait_for_selector(".wine")
+        check("English by default", lg.locator("#dk_cellar").inner_text().strip() == "Cellar" and lg.evaluate("document.documentElement.lang") == "en")
+        lg.click("#dk_settings")
+        lg.wait_for_selector("dialog[open] select[aria-label='Language']")
+        check("the language list offers Automatic, English and Svenska",
+              lg.locator("dialog[open] select[aria-label='Language'] option").all_inner_texts()[:1] == ["Automatic"] and "Svenska" in lg.locator("dialog[open] select[aria-label='Language'] option").all_inner_texts())
+        with lg.expect_navigation():
+            lg.select_option("dialog[open] select[aria-label='Language']", "sv")
+        lg.wait_for_selector(".wine")
+        check("Swedish: the menu and the page are translated", lg.locator("#dk_cellar").inner_text().strip() == "Källare" and lg.locator("#dk_settings").inner_text().strip() == "Inställningar" and lg.evaluate("document.documentElement.lang") == "sv", lg.locator("#dk_cellar").inner_text())
+        check("Swedish: a number inside a line keeps its value", "flaskor" in lg.locator("#k-bottles-s, .kpi, body").first.inner_text() or "flaskor" in lg.inner_text("body"))
+        check("Swedish: wine names are not translated", "Paste Test" in lg.inner_text("body") or "Drop Test" in lg.inner_text("body"))
+        lg.reload()
+        lg.wait_for_selector(".wine")
+        check("the language is remembered", lg.locator("#dk_cellar").inner_text().strip() == "Källare")
+        lg.evaluate("localStorage.removeItem('wc_lang')")
+        lg.close()
+
         check("no script errors", errors == [], errors)
         browser.close()
 finally:

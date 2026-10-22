@@ -3047,13 +3047,35 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
      (lang/<code>.json), numbers inside a line are written {0}, {1}. Anything without an entry stays English.
      To add a language see lang/README.md. */
   var NUMRE = /\d+(?:[.,]\d+)*/g;
+  function trLine(core) {
+    var d = I18N.dict, nums = [], key = core.replace(NUMRE, function (x) { nums.push(x); return '{' + (nums.length - 1) + '}'; });
+    if (!Object.prototype.hasOwnProperty.call(d, key)) return null;
+    var v = d[key]; if (typeof v !== 'string' || !v) return null;
+    return v.replace(/\{(\d+)\}/g, function (x, i) { return nums[i] != null ? nums[i] : x; });
+  }
+  /* a piece that is only words ("fresh white.") is translated word by word */
+  function trWords(piece) {
+    var dot = /[.!?]$/.exec(piece), body = dot ? piece.slice(0, -1) : piece, out = [];
+    var words = body.split(' ');
+    for (var i = 0; i < words.length; i++) { var w = trLine(words[i]) || trLine(words[i].toLowerCase()); if (w == null) return null; out.push(w); }
+    var r = out.join(' ');
+    if (/^[A-Z\u00C0-\u00DE]/.test(piece)) r = r.charAt(0).toUpperCase() + r.slice(1);
+    return r + (dot ? dot[0] : '');
+  }
   function tr(s) {
-    var d = I18N.dict; if (!d || !s) return s;
+    if (!I18N.dict || !s) return s;
     var m = /^(\s*)([\s\S]*?)(\s*)$/.exec(s), core = m[2]; if (!core) return s;
-    var nums = [], key = core.replace(NUMRE, function (x) { nums.push(x); return '{' + (nums.length - 1) + '}'; });
-    if (!Object.prototype.hasOwnProperty.call(d, key)) return s;
-    var v = d[key]; if (typeof v !== 'string' || !v) return s;
-    return m[1] + v.replace(/\{(\d+)\}/g, function (x, i) { return nums[i] != null ? nums[i] : x; }) + m[3];
+    var r = trLine(core);
+    if (r == null) { var pk = I18N.prefixes || (I18N.prefixes = Object.keys(I18N.dict).filter(function (k) { return k.slice(-1) === ' '; })); for (var q = 0; q < pk.length; q++) if (core.indexOf(pk[q]) === 0 && typeof I18N.dict[pk[q]] === 'string' && I18N.dict[pk[q]]) { r = I18N.dict[pk[q]] + core.slice(pk[q].length); break; } }
+    if (r == null) {
+      /* a line made of known pieces joined by ", " or " · " is translated piece by piece */
+      var parts = core.split(/( · |, )/), hit = false, style = /^(very )?(light|medium|full)-bodied\b|^sparkling\b/i.test(core);
+      if (parts.length > 1) {
+        r = parts.map(function (p, i) { if (i % 2) return p; var x = trLine(p); if (x == null && style) x = trWords(p); if (x != null) hit = true; return x == null ? p : x; }).join('');
+        if (!hit) r = null;
+      } else if (/^(very )?(light|medium|full)-bodied\b|^sparkling\b/i.test(core)) { r = trWords(core); }
+    }
+    return r == null ? s : m[1] + r + m[3];
   }
   var TR_ATTRS = ['placeholder', 'title', 'aria-label', 'alt'];
   var trSeen = new WeakMap(), trCollect = null;
@@ -3061,14 +3083,14 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
   function trNote(s) { if (trCollect && /[A-Za-zÀ-ɏ]{2}/.test(s)) trCollect[s.trim().replace(NUMRE, function (x, i) { return '{#}'; })] = 1; }
   function trText(n) {
     var v = n.nodeValue; if (trSeen.get(n) === v || trSkip(n)) return;
-    var out = tr(v); trSeen.set(n, out); if (trCollect) trNote(v); if (out !== v) n.nodeValue = out;
+    var out = tr(v); trSeen.set(n, out); if (trCollect && out === v) trNote(v); if (out !== v) n.nodeValue = out;
   }
   function trAttrs(el) {
     if (!el.getAttribute || trSkip(el)) return;
     TR_ATTRS.forEach(function (a) {
       var v = el.getAttribute(a); if (v == null) return;
       var seen = el.__trs || (el.__trs = {}); if (seen[a] === v) return;
-      var out = tr(v); seen[a] = out; if (trCollect) trNote(v); if (out !== v) el.setAttribute(a, out);
+      var out = tr(v); seen[a] = out; if (trCollect && out === v) trNote(v); if (out !== v) el.setAttribute(a, out);
     });
   }
   function trWalk(root) {

@@ -718,6 +718,22 @@ try:
         html = r.read().decode()
     check("page is served", "Cellar" in html and "Cellar" in html and r.status == 200)
     check("unknown api path is 404", call("GET", "/api/nope")[0] == 404)
+    # ---- languages
+    st, ls = call("GET", "/api/languages")
+    codes = [l["code"] for l in ls["languages"]]
+    check("language list has English and Swedish", st == 200 and "en" in codes and "sv" in codes, ls)
+    check("language file: unknown or unsafe code is 404", call("GET", "/api/lang/zz")[0] == 404 and call("GET", "/api/lang/..%2Fserver")[0] == 404 and call("GET", "/api/lang/EN")[0] == 404)
+    import re as _re
+    en_strings = call("GET", "/api/lang/en")[1]["strings"]
+    for code in codes:
+        st, f = call("GET", "/api/lang/" + code)
+        strings = f.get("strings", {})
+        unknown = [k for k in strings if k not in en_strings]
+        bad = [k for k, v in strings.items() if v and sorted(_re.findall(r"\{\d+\}", k)) != sorted(_re.findall(r"\{\d+\}", v))]
+        check("language %s: named, only known keys, placeholders kept" % code, st == 200 and f.get("_name") and not unknown and not bad, (unknown[:3], bad[:3]))
+    sv = call("GET", "/api/lang/sv")[1]["strings"]
+    empty = [k for k in en_strings if not sv.get(k)]
+    check("Swedish translates every string", not empty, empty[:5])
 finally:
     stop()
     mock.shutdown()
