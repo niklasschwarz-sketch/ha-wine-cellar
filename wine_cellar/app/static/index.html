@@ -304,6 +304,15 @@ video.cam{width:100%;max-height:16rem;border-radius:var(--r-md);background:#000;
 .pl-row .nm{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.3;text-align:left}
 .pl-row .nm b{font-weight:600}
 
+/* the menu editor */
+.nvlist{display:grid;gap:var(--sp-2)}
+.nvrow{display:flex;align-items:center;gap:var(--sp-2);min-height:56px;padding:4px 8px;border:1px solid var(--divider);border-radius:var(--r-md);background:var(--surface)}
+.nvrow.drag{border-color:var(--accent);box-shadow:0 6px 18px rgba(0,0,0,.25);position:relative;z-index:2}
+.nvrow .nvh{appearance:none;border:0;background:none;color:var(--text-2);min-width:var(--hit);min-height:var(--hit);cursor:grab;touch-action:none;font-size:1.3rem;border-radius:var(--r-sm)}
+.nvrow .nvn{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.3}
+.nvrow .nvn small{color:var(--text-2);font-size:var(--fs-xs)}
+.nvrow .btn.sq{min-width:var(--hit);padding:0}
+.nvrow label.chk{min-height:var(--hit);font-size:var(--fs-sm);white-space:nowrap}
 /* printed wine list: always a paper document, light in both themes */
 #menu{width:min(54rem,calc(100vw - 16px))}
 .mwrap{display:flex;flex-direction:column;max-height:calc(100vh - 32px)}
@@ -406,6 +415,9 @@ table.xl{border-collapse:separate;border-spacing:0;font-size:var(--fs-sm);min-wi
 .dk{appearance:none;border:0;background:none;color:var(--text-2);min-width:60px;min-height:var(--hit);padding:2px 8px;font-size:var(--fs-xs);font-weight:500;border-radius:var(--r-md);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
 .dk svg{width:24px;height:24px;display:block;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .dk.on{color:var(--accent);font-weight:600}
+.dk[hidden]{display:none!important}
+.dk.x{display:none}
+.dk span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dk.add{width:52px;height:52px;min-width:0;min-height:0;padding:0;margin-top:-26px;border-radius:50%;background:var(--accent);color:var(--on-accent);font-size:1.8rem;line-height:1;font-weight:400;box-shadow:0 4px 12px rgba(0,0,0,.3)}
 .dock .menuwrap{display:flex}
 .dock .menu{top:auto;bottom:calc(100% + 14px);right:0}
@@ -413,10 +425,13 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
 
 @media (min-width:56rem){
   body{padding-left:calc(104px + 28px);padding-bottom:max(24px,env(safe-area-inset-bottom))}
-  .dock{top:0;right:auto;bottom:0;width:104px;height:auto;flex-direction:column;justify-content:flex-start;gap:var(--sp-2);padding:28px 0;border-top:0;border-right:1px solid var(--divider)}
-  .dk{width:84px;min-height:60px;font-size:var(--fs-sm)}
+  .dock{top:0;right:auto;bottom:0;width:104px;height:auto;flex-direction:column;justify-content:flex-start;gap:2px;padding:20px 0;border-top:0;border-right:1px solid var(--divider)}
+  .dk{flex:none;width:84px;min-height:56px;font-size:var(--fs-xs)}
   .dk.add{order:-1;width:56px;height:56px;margin:0 0 20px}
   .dock .menu{position:fixed;bottom:16px;top:auto;left:calc(104px + 10px);right:auto}
+  .dk.x{display:flex}
+  .dock .menuwrap{display:none}
+  .dock{overflow-y:auto;scrollbar-width:thin}
   .toast{bottom:24px}
 }
 @media (max-width:56rem){
@@ -542,10 +557,7 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
   <div class="tip" id="tip"></div>
 </div>
 <nav class="dock" id="dock" aria-label="Main">
-  <button class="dk on" id="dkCellar" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6M10 2v6c0 1.5-3 2.5-3 6v6a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-6c0-3.5-3-4.5-3-6V2"/><path d="M7 15h10"/></svg><span>Cellar</span></button>
-  <button class="dk" id="dkDrink" type="button" title="Show the wines that are ready to drink now"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10l-1 7a4 4 0 0 1-8 0z"/><path d="M12 14v7M8 21h8"/></svg><span>Drink</span></button>
-  <button class="dk add" id="addBtn" type="button" aria-label="Add wine" title="Add wine">+</button>
-  <button class="dk" id="dkStats" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V11M12 21V4M19 21v-7"/></svg><span>Stats</span></button>
+    <button class="dk add" id="addBtn" type="button" aria-label="Add wine" title="Add wine">+</button>
   <div class="menuwrap">
     <button class="dk" id="moreBtn" type="button" aria-haspopup="menu" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg><span>More</span></button>
     <div class="menu" id="moreMenu" role="menu" hidden>
@@ -1070,7 +1082,7 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
 
   function render() {
     hideTip();
-    $('placesBtn').hidden = !placesOn();
+    $('placesBtn').hidden = !placesOn(); if (navBtns && navBtns.places && navPlaces !== placesOn()) buildNav();
     drawKpis(); drawSoon(); drawOcc(); drawChips(); drawPlaces(); drawBar();
     if ($('chartsBox').open) { vintageChart($('c-vintage')); colourChart($('c-colour')); regionChart($('c-region')); windowChart($('c-window')); producerChart($('c-producer')); }
     drawActivity(); drawGrid();
@@ -2209,6 +2221,125 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
   $('chartsBox').addEventListener('toggle', render);
   var layout = $('layout');
   layout.classList.add('side-off');
+  /* ---------- navigation: what is in the bar, and in which order (kept in this browser) ---------- */
+  var ICO = {
+    cellar: '<path d="M9 2h6M10 2v6c0 1.5-3 2.5-3 6v6a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-6c0-3.5-3-4.5-3-6V2"/><path d="M7 15h10"/>',
+    drink: '<path d="M7 3h10l-1 7a4 4 0 0 1-8 0z"/><path d="M12 14v7M8 21h8"/>',
+    stats: '<path d="M5 21V11M12 21V4M19 21v-7"/>',
+    places: '<path d="M3 10l9-6 9 6v10H3z"/><path d="M9 20v-6h6v6"/>',
+    table: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v16"/>',
+    list: '<path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/>',
+    pair: '<path d="M6 3v7a2 2 0 0 0 2 2v9M10 3v7a2 2 0 0 1-2 2M17 3c-2 2-2 6 0 8v10"/>',
+    labels: '<path d="M4 5v14M7 5v14M11 5v14M14 5v14M17 5v14M20 5v14"/>',
+    imp: '<path d="M12 3v12M7 10l5 5 5-5M4 20h16"/>',
+    climate: '<path d="M14 14.8V5a2 2 0 0 0-4 0v9.8a4 4 0 1 0 4 0z"/>',
+    alerts: '<path d="M6 17v-6a6 6 0 0 1 12 0v6l2 2H4z"/><path d="M10 21h4"/>',
+    look: '<circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/>',
+    settings: '<path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/>',
+    layout: '<rect x="3" y="4" width="7" height="7" rx="1"/><rect x="14" y="4" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>'
+  };
+  /* src: the button that already does the job (kept inside the More menu); none: the item is the dock button itself */
+  var NAV = [
+    { id: 'cellar', label: 'Cellar', long: 'Cellar', dock: 'dkCellar' },
+    { id: 'drink', label: 'Drink', long: 'Drink: wines ready now', dock: 'dkDrink' },
+    { id: 'stats', label: 'Stats', long: 'Stats', dock: 'dkStats' },
+    { id: 'places', label: 'Places', long: 'Storage places', src: 'placesBtn', ico: 'places' },
+    { id: 'table', label: 'Table', long: 'Edit table', src: 'tableBtn' },
+    { id: 'list', label: 'Wine list', long: 'Wine list', src: 'menuBtn' },
+    { id: 'pair', label: 'Pairing', long: 'Dinner pairing', src: 'pairBtn' },
+    { id: 'labels', label: 'Labels', long: 'Bottle labels', src: 'labelBtn' },
+    { id: 'imp', label: 'Import', long: 'Import / export', src: 'importBtn' },
+    { id: 'climate', label: 'Climate', long: 'Cellar climate', src: 'climateBtn' },
+    { id: 'alerts', label: 'Alerts', long: 'Alerts and sensors', src: 'alertsBtn' },
+    { id: 'look', label: 'Look', long: 'Appearance', src: 'appearBtn' },
+    { id: 'settings', label: 'Settings', long: 'Settings', src: 'settingsBtn' },
+    { id: 'layout', label: 'Menu', long: 'Customise this menu', ico: 'layout' }
+  ];
+  var NAV_MAX_BAR = 3, NAV_DEFAULT_BAR = ['cellar', 'drink', 'stats'];
+  var navById = {}; NAV.forEach(function (n) { navById[n.id] = n; });
+  var navBtns = {}, navHolder = h('div', { hidden: true, id: 'navSrc' });
+  document.body.appendChild(navHolder);
+  function navCfg() {
+    var c = null; try { c = JSON.parse(lsGet('wc_nav') || 'null'); } catch (e) {}
+    c = c && typeof c === 'object' ? c : {};
+    var order = (Array.isArray(c.order) ? c.order : []).filter(function (id, i, a) { return navById[id] && a.indexOf(id) === i; });
+    NAV.forEach(function (n) { if (order.indexOf(n.id) < 0) order.push(n.id); });
+    var bar = (Array.isArray(c.bar) ? c.bar : NAV_DEFAULT_BAR).filter(function (id, i, a) { return navById[id] && a.indexOf(id) === i; }).slice(0, NAV_MAX_BAR);
+    return { order: order, bar: bar };
+  }
+  function navSave(cfg) { lsSet('wc_nav', JSON.stringify(cfg)); buildNav(); }
+  var navPlaces = null;
+  function navAvail(n) { return n.id !== 'places' || placesOn(); }
+  function navIcon(n) { return '<svg viewBox="0 0 24 24" aria-hidden="true">' + ICO[n.ico || n.id] + '</svg>'; }
+  function navAct(n) { return n.id === 'layout' ? openNavEditor : function () { var s = $(n.src); s.hidden = false; s.click(); }; }
+  function dockBtn(n) {
+    if (navBtns[n.id]) return navBtns[n.id];
+    var b = h('button', { type: 'button', 'class': 'dk item', id: n.dock || 'dk_' + n.id, title: n.long });
+    b.innerHTML = navIcon(n) + '<span></span>'; b.lastChild.textContent = n.label;
+    if (!n.dock) b.addEventListener('click', navAct(n));
+    navBtns[n.id] = b; return b;
+  }
+  function buildNav() {
+    navPlaces = placesOn();
+    var cfg = navCfg(), dock = $('dock'), wrap = dock.querySelector('.menuwrap'), more = $('moreMenu'), add = $('addBtn');
+    var inBar = {}; cfg.bar.forEach(function (id) { inBar[id] = 1; });
+    /* every source button goes back into the holder, then the ones that are not in the bar go into the More menu */
+    NAV.forEach(function (n) { if (n.src) navHolder.appendChild($(n.src)); });
+    more.querySelectorAll('.mnx').forEach(function (x) { x.remove(); });
+    var shown = [];
+    cfg.order.forEach(function (id) {
+      var n = navById[id], b = dockBtn(n), ok = navAvail(n);
+      dock.insertBefore(b, wrap);
+      b.hidden = !ok; b.classList.toggle('bar', !!inBar[id]); b.classList.toggle('x', !inBar[id]);
+      if (!ok || inBar[id]) return;
+      var m;
+      if (n.src) { m = $(n.src); m.hidden = false; m.textContent = n.long; }
+      else { m = h('button', { role: 'menuitem', type: 'button', 'class': 'mnx', text: n.long, onclick: function () { b.click(); } }); }
+      more.appendChild(m);
+    });
+    var bars = dock.querySelectorAll('.dk.item.bar');
+    dock.insertBefore(add, bars[1] ? bars[1].nextSibling : bars[0] ? bars[0].nextSibling : dock.firstChild);
+    $('moreBtn').hidden = !more.children.length;
+  }
+  function openNavEditor() {
+    var cfg = navCfg(), list = h('div', { 'class': 'nvlist', role: 'list' }), note = h('p', { 'class': 'note' });
+    function collect() {
+      var rows = Array.prototype.slice.call(list.children);
+      return { order: rows.map(function (r) { return r.dataset.id; }), bar: rows.filter(function (r) { return r.querySelector('input').checked; }).map(function (r) { return r.dataset.id; }) };
+    }
+    function persist() { var c = collect(); lsSet('wc_nav', JSON.stringify(c)); buildNav(); count(); }
+    function count() { var k = collect().bar.length; note.textContent = k + ' of ' + NAV_MAX_BAR + ' places in the bottom bar on a phone. Everything else is under More. A wide screen, such as a wall tablet, lists all of them down the left side in this order.'; }
+    function row(id) {
+      var n = navById[id], r = h('div', { 'class': 'nvrow', role: 'listitem' }); r.dataset.id = id;
+      var handle = h('button', { type: 'button', 'class': 'nvh', 'aria-label': 'Drag to move ' + n.long, text: '⠿' });
+      var cb = h('input', { type: 'checkbox', 'aria-label': 'Show ' + n.long + ' in the bottom bar' }); cb.checked = cfg.bar.indexOf(id) >= 0;
+      cb.addEventListener('change', function () { if (cb.checked && collect().bar.length > NAV_MAX_BAR) { cb.checked = false; toast('The bottom bar holds ' + NAV_MAX_BAR + '. Turn one off first.'); return; } persist(); });
+      var move = function (d) { return function () { var sib = d < 0 ? r.previousElementSibling : r.nextElementSibling; if (!sib) return; if (d < 0) list.insertBefore(r, sib); else list.insertBefore(sib, r); persist(); }; };
+      var up = h('button', { type: 'button', 'class': 'btn sm sq', 'aria-label': 'Move ' + n.long + ' up', text: '↑', onclick: move(-1) });
+      var down = h('button', { type: 'button', 'class': 'btn sm sq', 'aria-label': 'Move ' + n.long + ' down', text: '↓', onclick: move(1) });
+      var dragging = false;
+      handle.addEventListener('pointerdown', function (e) { e.preventDefault(); dragging = true; r.classList.add('drag'); try { handle.setPointerCapture(e.pointerId); } catch (x) {} });
+      handle.addEventListener('pointermove', function (e) {
+        if (!dragging) return;
+        var before = null, sibs = Array.prototype.filter.call(list.children, function (x) { return x !== r; });
+        for (var i = 0; i < sibs.length; i++) { var b = sibs[i].getBoundingClientRect(); if (e.clientY < b.top + b.height / 2) { before = sibs[i]; break; } }
+        if (before !== r.nextElementSibling) list.insertBefore(r, before);
+      });
+      var end = function () { if (!dragging) return; dragging = false; r.classList.remove('drag'); persist(); };
+      handle.addEventListener('pointerup', end); handle.addEventListener('pointercancel', end);
+      r.appendChild(handle);
+      r.appendChild(h('div', { 'class': 'nvn' }, h('span', { text: n.long }), n.id === 'places' ? h('small', { text: 'Only when storage places are on' }) : null));
+      r.appendChild(h('label', { 'class': 'chk' }, cb, ' Bar'));
+      r.appendChild(up); r.appendChild(down);
+      return r;
+    }
+    cfg.order.forEach(function (id) { list.appendChild(row(id)); });
+    count();
+    openSheet('Customise the menu', h('div', { 'class': 'f', style: 'gap:14px' }, note, list),
+      [h('button', { type: 'button', 'class': 'btn', text: 'Reset to default', onclick: function () { lsSet('wc_nav', ''); buildNav(); openNavEditor(); } }),
+       h('button', { type: 'button', 'class': 'btn primary', text: 'Done', onclick: function () { dlg.close(); } })]);
+  }
+  buildNav();
   $('dkCellar').addEventListener('click', function () { if (dlg.open) dlg.close(); Object.keys(DIM_LABEL).forEach(function (k) { state[k].clear(); }); state.q = ''; $('q').value = ''; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
   $('dkDrink').addEventListener('click', function () { showAll('status', 'ready'); });
   $('dkStats').addEventListener('click', openStats);

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.18.0
+- **Your own menu.** *Customise this menu* (under More on a phone, or the Menu icon on a wide screen) lists every option. Drag the handle, or use the arrows, to put them in the order you like, and tick **Bar** for up to three that should sit in the phone's bottom bar. The rest stay under More.
+- **A wall tablet or any wide screen has no More button any more.** All options are listed down the left side, in your order, with an icon and a short name each.
+- The choice is kept in the browser you set it in, so your phone and the wall tablet can differ. *Reset to default* puts everything back.
+- Drink, Stats, Storage places, Edit table, Wine list, Dinner pairing, Bottle labels, Import / export, Cellar climate, Alerts and sensors, Appearance and Settings can all be moved or put in the bar.
+
 ## 0.17.0
 - **New look, built on one set of design rules.** One colour, size, spacing and corner scale replaces dozens of one-off values, so every screen now matches. The accent is burgundy.
 - **Dark mode.** The app follows your device by default. *More, Appearance* lets you choose Light or Dark, and a larger text size (*Large*, *Wall display*) for a kitchen or wall tablet. The choice is kept in that browser only.
