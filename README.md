@@ -30,6 +30,9 @@ Home Assistant can only add public repositories. While this repo is private, cop
 
 **Feedback:** tell the developer what you tried, what you expected and what happened, and include the add-on's Log tab text if something failed. Please export a CSV from **Import / export** before an update, to be safe. Changes per version are in [`wine_cellar/CHANGELOG.md`](wine_cellar/CHANGELOG.md).
 
+## Languages
+The app can be shown in more than one language (Settings → On this device → Language). Adding a language is one JSON file: see [`wine_cellar/app/lang/README.md`](wine_cellar/app/lang/README.md). Translations are welcome as pull requests.
+
 ## Adding pictures in bulk
 **More → Import / export → Import pictures from a zip.** The zip format is described in [`PICTURE_ZIP_FORMAT.md`](PICTURE_ZIP_FORMAT.md), so you can make your own zip from your own photos or any other source you have the right to use. The add-on itself only downloads pictures from Open Food Facts.
 

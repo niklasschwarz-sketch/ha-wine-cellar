@@ -92,6 +92,16 @@ Tick rows to add or remove a bottle on all of them, duplicate them, or delete th
 ## Export and import
 **Import / export** downloads a CSV (opens in Excel, Numbers, Google Sheets) or a full JSON copy with history and storage places. The CSV uses CellarTracker's column names, so it can be imported again, here or in CellarTracker. Importing again updates wines and adds new ones; it deletes nothing and restores the places from the Location and Bin columns when storage places are on. For a complete backup, include this add-on in your Home Assistant backups. The full copy also holds your pictures and settings (a smaller copy leaves the pictures out); **Restore from a full copy** puts it back, asks first, and replaces everything in the cellar, so it is meant for a new install or after a mistake.
 
+## Language
+**Settings → On this device → Language** switches the app between the languages installed, or follows your browser (*Automatic*). Anything not translated yet stays in English, and your own wine names and notes are never changed.
+
+**Add your own language.** Each language is one file in the add-on's `lang` folder, so no coding is needed:
+1. Copy `en.json` (in `wine_cellar/app/lang/` in the GitHub repository) to your language code, for example `de.json`.
+2. Set `"_name"` to the language's own name and translate the *values* under `"strings"`. Leave the English keys as they are, and keep placeholders such as `{0}`.
+3. Send it to the developer as a pull request or an issue on GitHub and it will be included in the next version. For private use on a local add-on, put the file in the `lang` folder of your copy and restart the add-on.
+
+A partial translation works: missing lines show in English. The full guide is in `wine_cellar/app/lang/README.md`.
+
 ## Customise the menu
 Open **Settings → On this device → Customise the menu…**. Drag the handle (or use the arrows) to put the options in your order. Each option has a choice: **In the bar** (up to three on a phone), **In More**, or **Hidden**, which leaves it out of the menu completely. Settings can't be hidden, so you can always get back. A wide screen lists all options that are not hidden down the left side in your order. **Reset to default** restores everything. The choice is kept per browser.
 
