@@ -776,6 +776,7 @@
   "No barcode found. Try again closer and in good light, or type the number.": "No barcode found. Try again closer and in good light, or type the number.",
   "Could not load the barcode reader": "Could not load the barcode reader",
   "Could not open the photo": "Could not open the photo",
-  "Camera scanning needs Home Assistant opened over HTTPS. You can also photograph the barcode, use a scanner, or type the number.": "Camera scanning needs Home Assistant opened over HTTPS. You can also photograph the barcode, use a scanner, or type the number."
+  "Camera scanning needs Home Assistant opened over HTTPS. You can also photograph the barcode, use a scanner, or type the number.": "Camera scanning needs Home Assistant opened over HTTPS. You can also photograph the barcode, use a scanner, or type the number.",
+  "Use the camera": "Use the camera"
  }
 }

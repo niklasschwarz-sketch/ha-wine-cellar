@@ -775,6 +775,7 @@
   "No barcode found. Try again closer and in good light, or type the number.": "Ingen streckkod hittades. Försök igen närmare och i bra ljus, eller skriv numret.",
   "Could not load the barcode reader": "Kunde inte ladda streckkodsläsaren",
   "Could not open the photo": "Kunde inte öppna fotot",
-  "Camera scanning needs Home Assistant opened over HTTPS. You can also photograph the barcode, use a scanner, or type the number.": "Kameraskanning kräver att Home Assistant öppnas via HTTPS. Du kan också fotografera streckkoden, använda en scanner eller skriva numret."
+  "Camera scanning needs Home Assistant opened over HTTPS. You can also photograph the barcode, use a scanner, or type the number.": "Kameraskanning kräver att Home Assistant öppnas via HTTPS. Du kan också fotografera streckkoden, använda en scanner eller skriva numret.",
+  "Use the camera": "Använd kameran"
  }
 }

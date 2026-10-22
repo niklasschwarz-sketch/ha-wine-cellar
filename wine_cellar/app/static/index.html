@@ -264,6 +264,7 @@ dialog[open]{animation:wc-in var(--t-in) var(--ease)}
 .sb{padding:var(--sp-4);overflow-y:auto;display:grid;gap:14px;min-width:0}
 .sf{display:flex;gap:var(--sp-2);padding:var(--sp-3) var(--sp-4);border-top:1px solid var(--divider);flex-wrap:wrap}
 .sf .btn{flex:1;min-width:8rem;white-space:nowrap}
+.btn[hidden]{display:none!important}
 .dl{display:grid;grid-template-columns:7.5rem 1fr;gap:6px 12px;font-size:var(--fs-sm)}
 .dl dt{color:var(--text-2)}
 .dl dd{margin:0;overflow-wrap:anywhere}
@@ -460,6 +461,7 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
   .sheet,.mwrap{max-height:92vh}
   .rkwrap{height:92vh;max-height:92vh}
   .sf .btn{min-width:0;padding:0 10px}
+  .sf .btn:nth-child(n+4),.sf .btn:nth-child(n+4) ~ .btn,.sf:has(.btn:nth-child(4)) .btn{min-width:42%;padding:6px 10px;white-space:normal;line-height:1.2;text-align:center}
   .dl{grid-template-columns:6rem 1fr}
 }
 @media (max-width:30rem){.two,.form2{grid-template-columns:1fr}}

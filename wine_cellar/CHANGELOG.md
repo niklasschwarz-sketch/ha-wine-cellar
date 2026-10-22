@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.19.5
+- Fixed the scan sheet on phones: the four buttons overflowed and overlapped, and *Use the camera* showed even where it cannot work. The buttons now wrap in two rows and only appear when they can work. *Use the camera* is translated.
+
 ## 0.19.4
 - **Barcode scanning on iPhone and iPad.** Safari has no built-in barcode reader, so the add-on now bundles the open-source ZXing reader (downloaded when the add-on is built, nothing is sent anywhere). The scan sheet gets *Photograph the barcode*, which works everywhere, and *Use the camera* now also works on iOS when Home Assistant is opened over HTTPS. If the download fails during the build, the add-on works as before.
 
