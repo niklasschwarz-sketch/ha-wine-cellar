@@ -1,7 +1,7 @@
 # Wine Cellar
 
 ## Install
-1. Add this repository with one tap: [Add to my Home Assistant](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fniklasschwarz-sketch%2Fha-wine-cellar) (it opens your own Home Assistant and asks you to confirm). Or by hand: Settings → Add-ons → Add-on store → ⋮ → Repositories → `https://github.com/niklasschwarz-sketch/ha-wine-cellar`. Home Assistant can only read public repositories. For a private one, copy the `wine_cellar` folder into the `/local_apps` folder of your Home Assistant instead.
+1. Add this repository with one tap: [Add to my Home Assistant](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fniklasschwarz-sketch%2Fha-wine-cellar) (it opens your own Home Assistant and asks you to confirm). Or by hand: Settings → Add-ons → Add-on store → ⋮ → Repositories → `https://github.com/niklasschwarz-sketch/ha-wine-cellar`.
 2. Install **Wine Cellar**. The first install builds the add-on on your own Home Assistant and downloads about 20 MB (the label reader), so it takes a few minutes.
 3. Start it and turn on **Show in sidebar**. Open **Cellar**.
 4. Tap **Add wine**, or **Import / export** and choose your CellarTracker CSV export (safe to repeat; matches on iWine).

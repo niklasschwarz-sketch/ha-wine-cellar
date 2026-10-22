@@ -1,7 +1,9 @@
 #!/bin/sh
-# Installs or updates the Wine Cellar add-on from the private GitHub repository.
+# Developer helper: copies the newest Wine Cellar from GitHub into your Home Assistant's local add-ons folder and updates it.
+# Normal users do not need it: add the repository in the add-on store instead (see the README).
 # Run it in the "Terminal & SSH" add-on:   sh update-wine-cellar.sh
-# The first time it asks for a GitHub token (read-only, this repository only) and remembers it.
+# It works without a token while the repository is public. For a private copy, run it with REQUIRE_TOKEN=1: it asks once for a
+# read-only GitHub token and remembers it. A BRANCH=name prefix picks another branch.
 set -e
 REPO="niklasschwarz-sketch/ha-wine-cellar"
 BRANCH="${BRANCH:-main}"
@@ -14,7 +16,7 @@ D=/local_apps; [ -d "$D" ] || D=/addons
 
 TOKEN=""
 [ -f "$TOKEN_FILE" ] && TOKEN="$(cat "$TOKEN_FILE")"
-if [ -z "$TOKEN" ] && [ -z "$WC_URL" ]; then
+if [ -z "$TOKEN" ] && [ -z "$WC_URL" ] && [ -n "$REQUIRE_TOKEN" ]; then
   echo "A GitHub token is needed once. Create it at github.com > Settings > Developer settings >"
   echo "Personal access tokens > Fine-grained tokens: only the repository $REPO, permission Contents: Read-only."
   printf "Paste the token and press Enter (it is not shown): "
@@ -31,6 +33,7 @@ CODE="$(curl -sSL -o "$W/src.tgz" -w '%{http_code}' ${TOKEN:+-H "Authorization: 
 case "$CODE" in
   200|000) ;;   # 000 is what curl reports for a local file
   401|403|404)
+    [ -z "$TOKEN" ] && { echo "GitHub cannot see the repository without a token (HTTP $CODE). If it is private, run:  REQUIRE_TOKEN=1 sh update-wine-cellar.sh"; exit 1; }
     rm -f "$TOKEN_FILE"
     echo "GitHub said no (HTTP $CODE): $(head -c 300 "$W/src.tgz" | tr '\n' ' ')"
     case "$CODE" in

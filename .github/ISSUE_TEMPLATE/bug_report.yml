@@ -1,0 +1,38 @@
+name: Bug report
+description: Something does not work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. Open More → Import / export\n2. ..."
+  - type: input
+    id: version
+    attributes:
+      label: Wine Cellar version
+      description: Settings → Add-ons → Wine Cellar → Info
+    validations:
+      required: true
+  - type: input
+    id: ha
+    attributes:
+      label: Home Assistant version and install type
+      placeholder: "2025.x, Home Assistant OS on a Raspberry Pi 4"
+  - type: input
+    id: device
+    attributes:
+      label: Device and browser
+      placeholder: "iPhone 15, Safari / Windows, Chrome / wall tablet, Fully Kiosk"
+  - type: textarea
+    id: log
+    attributes:
+      label: Add-on log
+      description: Settings → Add-ons → Wine Cellar → Log tab. Remove anything private. Screenshots are welcome too.
+      render: text

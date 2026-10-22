@@ -1,0 +1,16 @@
+name: Translation
+description: Offer a new language, or fix a wording in an existing one
+labels: [translation]
+body:
+  - type: input
+    id: lang
+    attributes:
+      label: Language and code
+      placeholder: "German (de)"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What would you like to change or add?
+      description: Easiest is a pull request that adds `wine_cellar/app/lang/<code>.json`. See wine_cellar/app/lang/README.md. If you prefer, paste the translated file here.

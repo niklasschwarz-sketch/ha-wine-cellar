@@ -1,0 +1,15 @@
+name: Idea or feature request
+description: Something you would like Wine Cellar to do
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like to do?
+      description: Describe the situation first, then the feature. "I want to… because…" works well.
+    validations:
+      required: true
+  - type: textarea
+    id: alt
+    attributes:
+      label: How do you do it today?

@@ -1,0 +1,18 @@
+configuration:
+  label_ai_key:
+    name: Gemini API-nyckel (valfritt)
+    description: >-
+      Läser etikettfoton med Google Gemini och fyller i formuläret. Klistra in din egen gratisnyckel från
+      https://aistudio.google.com/apikey. Lämna tomt för att ha det avstängt. När det är på skickas etikettfotot till Google.
+  label_ai_model:
+    name: Gemini-modell
+    description: Lämna tomt. Tillägget hittar då den nyaste Gemini Flash-modellen som din nyckel kan använda och byter själv när Google drar tillbaka en. Fyll bara i om du vill tvinga en viss modell.
+  auto_images:
+    name: Sök bilder online
+    description: Fråga Open Food Facts (en gratis, öppen databas) efter en bild på varje vin i lager.
+  systembolaget_prices:
+    name: Systembolagspriser
+    description: Hämta Systembolagets publika prislista en gång i veckan och matcha den mot dina viner. Avstängt som standard.
+  eur_sek_rate:
+    name: Växelkurs EUR till SEK
+    description: Används för att räkna om Systembolagspriser till din valuta när du väljer Använd som aktuellt värde.

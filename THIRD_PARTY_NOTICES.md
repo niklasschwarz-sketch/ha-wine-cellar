@@ -2,7 +2,7 @@
 
 Wine Cellar itself is licensed under the Apache License 2.0 (see `LICENSE` and `NOTICE`). The components below keep their own licences.
 
-Wine Cellar is not affiliated with, endorsed by or sponsored by CellarTracker, Vivino, Wine-Searcher, Systembolaget, Open Food Facts, Home Assistant or Nabu Casa. Those names belong to their owners and are used only to say what the add-on can link to or read from.
+Wine Cellar is not affiliated with, endorsed by or sponsored by CellarTracker, Vivino, Wine-Searcher, Systembolaget, Open Food Facts, Home Assistant, Nabu Casa or Google. Those names belong to their owners and are used only to say what the add-on can link to or read from.
 
 ## Software used inside the add-on
 | Component | Licence | Used for |
@@ -21,4 +21,5 @@ Pictures imported from a zip, uploaded or dropped in are yours to provide. The a
 ## Data the add-on can fetch (only when you use the feature)
 - **Open Food Facts** bottle pictures and product data: pictures are licensed CC BY-SA, data under the ODbL. The add-on stores the picture's source link and credit and shows them under the picture. Pictures you add yourself are yours.
 - **Systembolaget prices** (off by default): read from the community-maintained mirror at github.com/AlexGustafsson/systembolaget-api-data, which republishes Systembolaget's public assortment data. The data belongs to Systembolaget. Check their terms before relying on it beyond personal use.
+- **Google Gemini** (off unless you add your own API key): if you do, each label photo you take is sent to Google's Gemini service to be read, under your own key and Google's terms. Nothing else is sent.
 - **Links** to CellarTracker, Vivino, Wine-Searcher and Systembolaget are plain web links. Nothing is copied from those sites. Scores and reviews are typed in by the user.
