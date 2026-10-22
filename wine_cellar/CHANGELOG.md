@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.19.3
+- Label reading: when Google is overloaded (503) the add-on now waits and retries, and considers more Gemini models (Flash, Flash-Lite, the `-latest` aliases, Pro). The models found are written to the add-on log.
+
 ## 0.19.2
 - **Label reading is more robust.** If Google retires the chosen Gemini model (404) or is busy (503 high demand), the add-on now tries the other current Flash models and Flash-Lite before giving up, and says clearly when Google is busy. The on-device reading is an opt-in button instead of garbled text appearing on its own.
 

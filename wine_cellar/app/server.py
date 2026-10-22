@@ -27,7 +27,7 @@ import drink  # noqa: E402
 import mqtt  # noqa: E402
 import pairing  # noqa: E402
 
-VERSION = "0.19.2"  # keep in step with wine_cellar/config.yaml (test_api.py checks it)
+VERSION = "0.19.3"  # keep in step with wine_cellar/config.yaml (test_api.py checks it)
 
 DB_TYPE = os.environ.get("DB_TYPE", "postgres")
 PORT = int(os.environ.get("PORT", "8099"))
@@ -2675,12 +2675,20 @@ def flash_models():
     except (urllib.error.URLError, OSError, ValueError):
         return []
     found = []
+    skip = re.compile(r"image|tts|audio|live|embed|robotics|computer|thinking|learnlm|aqa|imagen|veo", re.I)
     for m in data.get("models") or []:
         name = str(m.get("name", "")).replace("models/", "")
-        ver = re.fullmatch(r"gemini-(\d+(?:\.\d+)?)-flash(-lite)?", name)
-        if ver and "generateContent" in (m.get("supportedGenerationMethods") or []):
-            found.append((1 if ver.group(2) else 0, -float(ver.group(1)), name))
-    return [n for _, _, n in sorted(found)]
+        if not name.startswith("gemini-") or skip.search(name) or "generateContent" not in (m.get("supportedGenerationMethods") or []):
+            continue
+        ver = re.match(r"gemini-(?:(\d+(?:\.\d+)?)-)?(flash|flash-lite|pro)(?:-(latest|preview.*|\d{3}))?$", name)
+        if not ver:
+            continue
+        v = float(ver.group(1) or 99)  # the "-latest" aliases count as newest
+        kind = {"flash": 0, "flash-lite": 1, "pro": 2}[ver.group(2)]
+        found.append((kind, -v, "preview" in name, name))
+    names = [n for _, _, _, n in sorted(found)]
+    log("Label reading: models available: %s" % ", ".join(names[:8]))
+    return names
 
 
 def newest_flash_model():
@@ -2708,7 +2716,7 @@ def read_label(blob):
         raw = None
         last = None
         tried = 0
-        while raw is None and tried < 6:
+        while raw is None and tried < 7:
             if not queue:
                 queue = [m for m in flash_models() if m not in last_failed(last)] if tried < 3 else []
                 if not queue:
@@ -2731,7 +2739,9 @@ def read_label(blob):
                     _label_model[0] = ""  # gone or not offered to this key: look for another
                     continue
                 if e.code in (500, 503, 504):  # Google is busy: try the next model, then once more
-                    time.sleep(2)
+                    time.sleep(min(2 * tried, 6))
+                    if not queue and tried < 3:
+                        queue = [model]  # nothing else to try: give the same model another go
                     continue
                 if e.code == 429:
                     raise ApiError(429, "Gemini's free limit was reached. Try again in a minute, or tomorrow if it keeps happening.")
