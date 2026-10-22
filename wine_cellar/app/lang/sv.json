@@ -767,6 +767,8 @@
   "{0} wines from your current filters": "{0} viner från dina aktuella filter",
   "{0}% of this selection": "{0} % av det här urvalet",
   "€{0} per bottle": "€{0} per flaska",
-  "−{0} bottle": "−{0} flaska"
+  "−{0} bottle": "−{0} flaska",
+  "Gemini did not accept this key. Keys from Google AI Studio start with AIza; yours does not. Create one at aistudio.google.com/apikey and put it in the add-on options.": "Gemini godtog inte nyckeln. Nycklar från Google AI Studio börjar med AIza, din gör inte det. Skapa en på aistudio.google.com/apikey och lägg in den i tilläggets alternativ.",
+  "Try the on-device reading (often inaccurate)": "Prova läsning på enheten (ofta felaktig)"
  }
 }

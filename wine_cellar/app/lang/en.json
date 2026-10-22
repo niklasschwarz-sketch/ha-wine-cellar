@@ -768,6 +768,8 @@
   "{0} wines from your current filters": "{0} wines from your current filters",
   "{0}% of this selection": "{0}% of this selection",
   "€{0} per bottle": "€{0} per bottle",
-  "−{0} bottle": "−{0} bottle"
+  "−{0} bottle": "−{0} bottle",
+  "Gemini did not accept this key. Keys from Google AI Studio start with AIza; yours does not. Create one at aistudio.google.com/apikey and put it in the add-on options.": "Gemini did not accept this key. Keys from Google AI Studio start with AIza; yours does not. Create one at aistudio.google.com/apikey and put it in the add-on options.",
+  "Try the on-device reading (often inaccurate)": "Try the on-device reading (often inaccurate)"
  }
 }

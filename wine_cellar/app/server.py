@@ -27,7 +27,7 @@ import drink  # noqa: E402
 import mqtt  # noqa: E402
 import pairing  # noqa: E402
 
-VERSION = "0.19.0"  # keep in step with wine_cellar/config.yaml (test_api.py checks it)
+VERSION = "0.19.1"  # keep in step with wine_cellar/config.yaml (test_api.py checks it)
 
 DB_TYPE = os.environ.get("DB_TYPE", "postgres")
 PORT = int(os.environ.get("PORT", "8099"))
@@ -2721,6 +2721,8 @@ def read_label(blob):
                         continue
                 if e.code == 429:
                     raise ApiError(429, "Gemini's free limit was reached. Try again in a minute, or tomorrow if it keeps happening.")
+                if e.code in (401, 403, 404) and not LABEL_KEY.startswith("AIza"):
+                    raise ApiError(502, "Gemini did not accept this key. Keys from Google AI Studio start with AIza; yours does not. Create one at aistudio.google.com/apikey and put it in the add-on options.")
                 if e.code == 404:
                     raise ApiError(502, "Gemini does not offer the model %s to this key. Clear the Gemini model option so the add-on picks a current one." % model)
                 if e.code in (400, 401, 403):

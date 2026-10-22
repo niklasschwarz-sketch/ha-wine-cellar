@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.19.1
+- **Label reading.** When Gemini refuses the key, the app now says so clearly (Google AI Studio keys start with `AIza`; other formats such as `AQ.` are not accepted) instead of silently showing garbled on-device text. The on-device reading is now an opt-in button.
+
 ## 0.19.0
 - **Swedish.** Settings, *On this device*, *Language*: Automatic (follows your browser), English or Svenska. The whole app is translated, including the dinner pairing suggestions, notices and error messages. Wine names, producers and your own notes are never changed. The choice is kept per browser.
 - **Add your own language.** A language is one JSON file in the add-on's `lang` folder, no coding needed. Copy `en.json`, translate the values and it appears in the list. Anything missing stays English, so a partial translation works. Guide: `wine_cellar/app/lang/README.md`.
