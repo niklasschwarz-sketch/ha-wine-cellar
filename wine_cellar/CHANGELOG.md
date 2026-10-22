@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.19.4
+- **Barcode scanning on iPhone and iPad.** Safari has no built-in barcode reader, so the add-on now bundles the open-source ZXing reader (downloaded when the add-on is built, nothing is sent anywhere). The scan sheet gets *Photograph the barcode*, which works everywhere, and *Use the camera* now also works on iOS when Home Assistant is opened over HTTPS. If the download fails during the build, the add-on works as before.
+
 ## 0.19.3
 - Label reading: when Google is overloaded (503) the add-on now waits and retries, and considers more Gemini models (Flash, Flash-Lite, the `-latest` aliases, Pro). The models found are written to the add-on log.
 

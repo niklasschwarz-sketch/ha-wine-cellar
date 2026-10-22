@@ -8,6 +8,7 @@ Wine Cellar is not affiliated with, endorsed by or sponsored by CellarTracker, V
 | Component | Licence | Used for |
 |---|---|---|
 | [Tesseract.js](https://github.com/naptha/tesseract.js) 5.1.1 and tesseract.js-core 5.1.0 | Apache-2.0 | Reading label photos in your own browser. Downloaded while the add-on is built. |
+| [ZXing (@zxing/library)](https://github.com/zxing-js/library) 0.21.3 | MIT | Reading barcodes from photos and the camera in your own browser (iPhone and iPad have no built-in reader). Downloaded while the add-on is built. |
 | [tessdata](https://github.com/naptha/tessdata) language files (English, French, Italian, Spanish) | Apache-2.0 | Text recognition models for the label reader. Downloaded while the add-on is built. |
 | [pg8000](https://github.com/tlocke/pg8000) 1.31.2 | BSD-3-Clause | Optional database driver, installed in the image. |
 | Python standard library, SQLite | PSF licence, public domain | Server and built-in database. |

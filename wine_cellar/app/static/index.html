@@ -1759,9 +1759,45 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
   }
   var ocrState = { ready: null, worker: null, langs: ['eng'] };
   function vurl(rel) { return new URL(base + 'vendor/' + rel, location.href).href; }
+  function vendorInfo() {
+    if (!ocrState.info) ocrState.info = demoMode ? Promise.resolve(null) : fetch(base + 'vendor/ready.json').then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+    return ocrState.info;
+  }
   function ocrAvailable() {
-    if (!ocrState.ready) ocrState.ready = (demoMode ? Promise.resolve(false) : fetch(base + 'vendor/ready.json').then(function (r) { return r.ok ? r.json() : null; }).then(function (j) { if (j && j.langs && j.langs.length) { ocrState.langs = j.langs; return true; } return false; }).catch(function () { return false; }));
+    if (!ocrState.ready) ocrState.ready = vendorInfo().then(function (j) { if (j && j.langs && j.langs.length) { ocrState.langs = j.langs; return true; } return false; });
     return ocrState.ready;
+  }
+  function zxAvailable() { return vendorInfo().then(function (j) { return !!(j && j.barcode); }); }
+  function loadZx() {
+    return new Promise(function (resolve, reject) {
+      if (window.ZXing) return resolve(window.ZXing);
+      var s = document.createElement('script'); s.src = vurl('zxing.min.js');
+      s.onload = function () { window.ZXing ? resolve(window.ZXing) : reject(new Error('Could not load the barcode reader')); };
+      s.onerror = function () { reject(new Error('Could not load the barcode reader')); };
+      document.head.appendChild(s);
+    });
+  }
+  var zxReader = null;
+  function zxDecode(canvas) {
+    var Z = window.ZXing; if (!Z) return '';
+    if (!zxReader) {
+      var hints = new Map();
+      hints.set(Z.DecodeHintType.POSSIBLE_FORMATS, [Z.BarcodeFormat.EAN_13, Z.BarcodeFormat.EAN_8, Z.BarcodeFormat.UPC_A, Z.BarcodeFormat.UPC_E, Z.BarcodeFormat.CODE_128]);
+      hints.set(Z.DecodeHintType.TRY_HARDER, true);
+      zxReader = new Z.MultiFormatReader(); zxReader.setHints(hints);
+    }
+    try { return zxReader.decode(new Z.BinaryBitmap(new Z.HybridBinarizer(new Z.HTMLCanvasElementLuminanceSource(canvas)))).getText(); } catch (e) { return ''; }
+  }
+  function zxDecodeImage(img) {
+    var tries = [[1, 0], [1, 90], [0.6, 0], [0.6, 90]];
+    for (var i = 0; i < tries.length; i++) {
+      var k = tries[i][0], rot = tries[i][1], w = Math.round(img.naturalWidth * k), hgt = Math.round(img.naturalHeight * k);
+      var c = document.createElement('canvas'), x = c.getContext('2d');
+      if (rot) { c.width = hgt; c.height = w; x.translate(hgt, 0); x.rotate(Math.PI / 2); } else { c.width = w; c.height = hgt; }
+      x.drawImage(img, 0, 0, w, hgt);
+      var t = zxDecode(c); if (t) return t;
+    }
+    return '';
   }
   function labelAiOn() { return !demoMode && !!cfg.labelAi; }
   function labelReadable() { return labelAiOn() ? Promise.resolve(true) : ocrAvailable(); }
@@ -2131,22 +2167,48 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
         .catch(function (e) { err.textContent = e.message; go.disabled = false; go.textContent = 'Look up'; });
     }
     input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); lookup(); } });
-    var canCam = window.isSecureContext && ('BarcodeDetector' in window) && navigator.mediaDevices && navigator.mediaDevices.getUserMedia;
-    var camBtn = canCam ? h('button', { type: 'button', 'class': 'btn', text: 'Use the camera', onclick: function () {
-      var det; try { det = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128'] }); } catch (e) { err.textContent = 'Barcode reading is not available in this browser.'; return; }
+    var secure = !!(window.isSecureContext && navigator.mediaDevices && navigator.mediaDevices.getUserMedia), nativeDet = 'BarcodeDetector' in window, zxOk = false;
+    function makeDetector() {
+      if (nativeDet) { try { return new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128'] }); } catch (e) { /* fall through to the bundled reader */ } }
+      if (!zxOk) return null;
+      var c = document.createElement('canvas');
+      return { detect: function (v) {
+        if (!v.videoWidth) return Promise.resolve([]);
+        c.width = v.videoWidth; c.height = v.videoHeight; c.getContext('2d').drawImage(v, 0, 0);
+        var t = zxDecode(c); return Promise.resolve(t ? [{ rawValue: t }] : []);
+      } };
+    }
+    var camBtn = h('button', { type: 'button', 'class': 'btn', text: 'Use the camera', hidden: true, onclick: function () {
+      var det = makeDetector(); if (!det) { err.textContent = 'Barcode reading is not available in this browser.'; return; }
       navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }).then(function (stream) {
         var v = h('video', { 'class': 'cam', playsinline: true, muted: true, autoplay: true }); v.srcObject = stream; camHost.replaceChildren(v);
         var alive = true; scanStop = function () { alive = false; stream.getTracks().forEach(function (t) { t.stop(); }); };
         (function tick() { if (!alive) return; det.detect(v).then(function (codes) { if (codes.length) lookup(codes[0].rawValue); else setTimeout(tick, 250); }).catch(function () { setTimeout(tick, 400); }); })();
       }).catch(function () { err.textContent = 'Could not open the camera. Check the browser permission for this page.'; });
-    } }) : null;
+    } });
+    var barIn = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true });
+    barIn.addEventListener('change', function () {
+      var f = barIn.files[0]; barIn.value = ''; if (!f) return;
+      err.textContent = ''; camHost.replaceChildren(h('p', { 'class': 'note', text: 'Reading the barcode…' }));
+      Promise.all([loadZx(), shrink(f, 1600)]).then(function (r) {
+        return new Promise(function (ok, no) { var u = URL.createObjectURL(r[1]), im = new Image(); im.onload = function () { URL.revokeObjectURL(u); ok(im); }; im.onerror = function () { no(new Error('Could not open the photo')); }; im.src = u; });
+      }).then(function (im) {
+        var t = zxDecodeImage(im); camHost.replaceChildren();
+        if (t) lookup(t); else err.textContent = 'No barcode found. Try again closer and in good light, or type the number.';
+      }).catch(function (e) { camHost.replaceChildren(); err.textContent = e.message; });
+    });
+    var barBtn = h('button', { type: 'button', 'class': 'btn', text: 'Photograph the barcode', hidden: true, onclick: function () { barIn.click(); } });
+    var camNote = h('p', { 'class': 'note', text: 'Camera scanning needs Home Assistant opened over HTTPS. You can also photograph the barcode, use a scanner, or type the number.', hidden: true });
+    function showCam() { camBtn.hidden = !(secure && (nativeDet || zxOk)); barBtn.hidden = !zxOk; camNote.hidden = !camBtn.hidden; }
+    showCam();
+    zxAvailable().then(function (ok) { zxOk = ok; showCam(); if (ok && !nativeDet) loadZx().catch(function () { zxOk = false; showCam(); }); });
     var labelIn = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true });
     labelIn.addEventListener('change', function () { var f = labelIn.files[0]; labelIn.value = ''; if (!f) return; err.textContent = ''; shrink(f, 1600).then(function (b) { stopCam(); openWineForm(null, { labelBlob: b }); }).catch(function (e) { err.textContent = e.message; }); });
     var labelBtn = h('button', { type: 'button', 'class': 'btn', text: 'Photograph the label', onclick: function () { labelIn.click(); } });
     var body = h('div', { 'class': 'f', style: 'gap:12px' }, labelIn,
       h('p', { 'class': 'note', text: 'Scan a bottle with a USB or Bluetooth scanner (click the box first), or type the number.' }), input, camHost,
-      canCam ? null : h('p', { 'class': 'note', text: 'Camera scanning needs Home Assistant opened over HTTPS in a browser that can read barcodes. A scanner or typing works everywhere.' }), err);
-    openSheet('Scan a bottle', body, [labelBtn, camBtn, go]);
+      camNote, err, barIn);
+    openSheet('Scan a bottle', body, [labelBtn, barBtn, camBtn, go]);
     setTimeout(function () { input.focus(); }, 60);
   }
   function scanResult(res) {

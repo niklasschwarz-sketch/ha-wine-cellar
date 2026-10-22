@@ -30,7 +30,7 @@ A wine cellar app that runs inside Home Assistant. Add, drink and move bottles, 
 - **Your cellar:** bottles, vintages, drinking windows, prices and values, several storage places (fridges, cellar, bar), gift and occasion tags, scores and reviews. Import and export CellarTracker CSV; full backup and restore.
 - **What to drink:** a *Drink now* list, one clear status per wine (Ready, Hold, Past peak, No window), and a weekly reminder through any Home Assistant notify service.
 - **Home Assistant:** cellar sensors over MQTT (bottles, ready, past peak, value) for dashboards and automations, and your own temperature and humidity sensors with alarms.
-- **Adding wines:** barcode scanning, label photo reading (on your device, or better with your own optional Gemini key), pictures by paste, drop or zip.
+- **Adding wines:** barcode scanning (camera or a photo, also on iPhone), label photo reading (on your device, or better with your own optional Gemini key), pictures by paste, drop or zip.
 - **Food and wine pairing** that works offline, a printable wine list and printable bottle barcode labels, stats and charts.
 - **Made for phones and wall tablets:** light and dark mode, text size, and a menu you arrange yourself.
 - **Languages:** English and Swedish, and adding another is one JSON file ([how](wine_cellar/app/lang/README.md)).

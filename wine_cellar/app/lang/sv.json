@@ -102,7 +102,6 @@
   "By value per bottle": "Efter värde per flaska",
   "By vintage": "Efter årgång",
   "Cake and creamy dessert": "Tårta och krämig dessert",
-  "Camera scanning needs Home Assistant opened over HTTPS in a browser that can read barcodes. A scanner or typing works everywhere.": "Kameraskanning kräver att Home Assistant öppnas över HTTPS i en webbläsare som kan läsa streckkoder. En skanner eller att skriva in numret fungerar överallt.",
   "Canada": "Kanada",
   "Cancel": "Avbryt",
   "carbonara, alfredo, gratin": "carbonara, alfredo, gratäng",
@@ -770,6 +769,12 @@
   "−{0} bottle": "−{0} flaska",
   "Try the on-device reading (often inaccurate)": "Prova läsning på enheten (ofta felaktig)",
   "Gemini is busy right now (high demand at Google). Try again in a minute.": "Gemini är upptaget just nu (hög belastning hos Google). Försök igen om en minut.",
-  "Gemini does not offer a usable model to this key. Check the API key in the add-on options.": "Gemini erbjuder ingen användbar modell för den här nyckeln. Kontrollera API-nyckeln i tilläggets alternativ."
+  "Gemini does not offer a usable model to this key. Check the API key in the add-on options.": "Gemini erbjuder ingen användbar modell för den här nyckeln. Kontrollera API-nyckeln i tilläggets alternativ.",
+  "Photograph the barcode": "Fotografera streckkoden",
+  "Reading the barcode…": "Läser streckkoden…",
+  "No barcode found. Try again closer and in good light, or type the number.": "Ingen streckkod hittades. Försök igen närmare och i bra ljus, eller skriv numret.",
+  "Could not load the barcode reader": "Kunde inte ladda streckkodsläsaren",
+  "Could not open the photo": "Kunde inte öppna fotot",
+  "Camera scanning needs Home Assistant opened over HTTPS. You can also photograph the barcode, use a scanner, or type the number.": "Kameraskanning kräver att Home Assistant öppnas via HTTPS. Du kan också fotografera streckkoden, använda en scanner eller skriva numret."
  }
 }

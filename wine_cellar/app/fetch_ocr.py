@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Download the on-device text reader (Tesseract.js) while the add-on image is built.
+"""Download the on-device text reader (Tesseract.js) and barcode reader (ZXing) while the add-on image is built.
 
 Everything is stored inside the add-on and served from it, so reading a label photo
 happens in your own browser and nothing is sent anywhere when you use it. If any
@@ -20,6 +20,7 @@ CORE = [
     ("tesseract.js-core@5.1.0/tesseract-core-lstm.wasm.js", "core/tesseract-core-lstm.wasm.js"),
 ]
 LANGS = ["eng", "fra", "ita", "spa"]
+ZXING = ("@zxing/library@0.21.3/umd/index.min.js", "zxing.min.js")
 
 
 def get(url, dest):
@@ -33,6 +34,7 @@ def get(url, dest):
 
 def main():
     shutil.rmtree(OUT, ignore_errors=True)
+    ready = {"langs": []}
     try:
         for src, name in CORE:
             get(CDN + src, os.path.join(OUT, name))
@@ -45,12 +47,22 @@ def main():
                 print("language %s skipped: %s" % (lang, e))
                 if lang == "eng":
                     raise
-        with open(os.path.join(OUT, "ready.json"), "w") as f:
-            json.dump({"langs": got}, f)
+        ready["langs"] = got
         print("Label reader installed: " + ", ".join(got))
     except Exception as e:
-        shutil.rmtree(OUT, ignore_errors=True)
+        for name in ("tesseract.min.js", "worker.min.js", "core", "lang"):
+            path = os.path.join(OUT, name)
+            shutil.rmtree(path, ignore_errors=True) if os.path.isdir(path) else (os.path.exists(path) and os.remove(path))
         print("Label reader not installed (%s). The add-on works without it." % e)
+    try:
+        get(CDN + ZXING[0], os.path.join(OUT, ZXING[1]))
+        ready["barcode"] = True
+        print("Barcode reader installed")
+    except Exception as e:
+        print("Barcode reader not installed (%s). Camera scanning then needs a browser that can read barcodes." % e)
+    if ready["langs"] or ready.get("barcode"):
+        with open(os.path.join(OUT, "ready.json"), "w") as f:
+            json.dump(ready, f)
 
 
 if __name__ == "__main__":

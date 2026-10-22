@@ -570,6 +570,29 @@ try:
         check("a wide screen lists all options down the side and has no More", wide.locator("#dock .dk.item:visible").count() >= 11 and not wide.locator("#moreBtn").is_visible())
         wide.close()
 
+        # ---- barcode from a photo (iPhone has no BarcodeDetector): the bundled reader is stubbed here
+        bp = browser.new_page(viewport={"width": 390, "height": 844}, has_touch=True)
+        bp.on("pageerror", lambda e: errors.append(str(e)))
+        bp.route("**/vendor/ready.json", lambda r: r.fulfill(status=200, content_type="application/json", body='{"langs": [], "barcode": true}'))
+        stub = ("window.ZXing={DecodeHintType:{POSSIBLE_FORMATS:1,TRY_HARDER:2},BarcodeFormat:{EAN_13:1,EAN_8:2,UPC_A:3,UPC_E:4,CODE_128:5},"
+                "MultiFormatReader:function(){this.setHints=function(){};this.decode=function(){return {getText:function(){return '7350040760015'}}}},"
+                "BinaryBitmap:function(){},HybridBinarizer:function(){},HTMLCanvasElementLuminanceSource:function(){}};")
+        bp.route("**/vendor/zxing.min.js", lambda r: r.fulfill(status=200, content_type="text/javascript", body=stub))
+        looked = []
+        bp.on("request", lambda rq: looked.append(rq.url) if "/api/ean/" in rq.url else None)
+        bp.goto(BASE + "/")
+        bp.wait_for_selector(".wine")
+        bp.evaluate("delete window.BarcodeDetector")
+        bp.click("#scanBtn")
+        bp.wait_for_selector("dialog[open] button:has-text('Photograph the barcode')")
+        check("without BarcodeDetector the sheet offers Photograph the barcode", bp.locator("dialog[open] button:has-text('Photograph the barcode')").is_visible())
+        png = bp.evaluate("(function(){var c=document.createElement('canvas');c.width=300;c.height=200;var x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,300,200);return c.toDataURL('image/jpeg').split(',')[1];})()")
+        import base64 as _b64
+        bp.locator("dialog[open] input[type=file]").nth(1).set_input_files({"name": "bar.jpg", "mimeType": "image/jpeg", "buffer": _b64.b64decode(png)})
+        bp.wait_for_timeout(1500)
+        check("a photo of a barcode is decoded and looked up", any(u.endswith("/api/ean/7350040760015") for u in looked), looked)
+        bp.close()
+
         # ---- language: pick Swedish in Settings, the page reloads in Swedish and keeps it
         lg = browser.new_page(viewport={"width": 1280, "height": 800})
         lg.on("pageerror", lambda e: errors.append(str(e)))

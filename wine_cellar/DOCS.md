@@ -53,7 +53,7 @@ For many wines at once, use **More → Import / export → Import pictures from 
 The add-on looks up a picture for each wine in stock on Open Food Facts (free, open database), about one wine every 7 seconds. Only close matches are used, so many wines will have none: tap the bottle on a card to add your own photo. Turn the automatic lookup off with the option `auto_images`.
 
 ## Scanning
-Use **Scan bottle**. A USB/Bluetooth scanner types the number into the box. The camera needs Home Assistant over HTTPS and a browser that supports barcode reading.
+Use **Scan bottle**. A USB/Bluetooth scanner types the number into the box. **Photograph the barcode** works on every phone, including iPhone and iPad: take a close, sharp picture and the number is read in your browser. **Use the camera** (live scanning) needs Home Assistant opened over HTTPS. If nothing is found, type the number under the barcode.
 
 ## Wine list
 **Wine list** shows a menu-style list of your current selection (filters apply). Print it from there.
@@ -76,7 +76,7 @@ Open **More → Cellar climate**. Pick a temperature sensor and a humidity senso
 On a bottle's page, **Tags and occasions** lets you mark it as a gift you received, a gift you gave, or one kept for a special occasion. Add an occasion (birthday, anniversary, wedding and so on), a person, a date and a note. Tick **Remind me every year** for birthdays and anniversaries: they show under **Coming up** for 45 days before. The Filters list has a **Tags** group once you have used a tag.
 
 ## Bottle labels
-**More → Bottle labels** shows a sheet of barcode labels (Code 128, text such as `WC12`) for your current selection or the whole cellar, one per bottle or one per wine, and **Print labels** opens the print dialog (3 labels across; use sticker paper). A single wine's page has **Print label**. Choose **Scan** and read a label with a USB or Bluetooth scanner (click the box first), or type the code, or use the camera if your browser can read barcodes: the wine's page opens, with **Open one** ready. Labels keep working after backups and restores because they carry the wine's number in this cellar. If you import the same cellar into a fresh install the numbers can change, so reprint then.
+**More → Bottle labels** shows a sheet of barcode labels (Code 128, text such as `WC12`) for your current selection or the whole cellar, one per bottle or one per wine, and **Print labels** opens the print dialog (3 labels across; use sticker paper). A single wine's page has **Print label**. Choose **Scan** and read a label with a USB or Bluetooth scanner (click the box first), or type the code, or use **Photograph the barcode** or the camera: the wine's page opens, with **Open one** ready. Labels keep working after backups and restores because they carry the wine's number in this cellar. If you import the same cellar into a fresh install the numbers can change, so reprint then.
 
 ## Scores and reviews
 Each wine page has **Scores and reviews**: add a critic or community score (out of 100, 20, 10 or 5) with the source, date, a few words and a link. The average of your critic scores is shown at the top, with the CellarTracker "members like it" share from your import. CellarTracker, Vivino and the critics do not let other apps read their scores, so you enter the ones you care about; the **CellarTracker** button opens the wine's page there for the community and critic notes.

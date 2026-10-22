@@ -103,7 +103,6 @@
   "By value per bottle": "By value per bottle",
   "By vintage": "By vintage",
   "Cake and creamy dessert": "Cake and creamy dessert",
-  "Camera scanning needs Home Assistant opened over HTTPS in a browser that can read barcodes. A scanner or typing works everywhere.": "Camera scanning needs Home Assistant opened over HTTPS in a browser that can read barcodes. A scanner or typing works everywhere.",
   "Canada": "Canada",
   "Cancel": "Cancel",
   "carbonara, alfredo, gratin": "carbonara, alfredo, gratin",
@@ -771,6 +770,12 @@
   "−{0} bottle": "−{0} bottle",
   "Try the on-device reading (often inaccurate)": "Try the on-device reading (often inaccurate)",
   "Gemini is busy right now (high demand at Google). Try again in a minute.": "Gemini is busy right now (high demand at Google). Try again in a minute.",
-  "Gemini does not offer a usable model to this key. Check the API key in the add-on options.": "Gemini does not offer a usable model to this key. Check the API key in the add-on options."
+  "Gemini does not offer a usable model to this key. Check the API key in the add-on options.": "Gemini does not offer a usable model to this key. Check the API key in the add-on options.",
+  "Photograph the barcode": "Photograph the barcode",
+  "Reading the barcode…": "Reading the barcode…",
+  "No barcode found. Try again closer and in good light, or type the number.": "No barcode found. Try again closer and in good light, or type the number.",
+  "Could not load the barcode reader": "Could not load the barcode reader",
+  "Could not open the photo": "Could not open the photo",
+  "Camera scanning needs Home Assistant opened over HTTPS. You can also photograph the barcode, use a scanner, or type the number.": "Camera scanning needs Home Assistant opened over HTTPS. You can also photograph the barcode, use a scanner, or type the number."
  }
 }
