@@ -318,7 +318,7 @@ video.cam{width:100%;max-height:16rem;border-radius:var(--r-md);background:#000;
 .nvrow .nvn{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.3}
 .nvrow .nvn small{color:var(--text-2);font-size:var(--fs-xs)}
 .nvrow .btn.sq{min-width:var(--hit);padding:0}
-.nvrow label.chk{min-height:var(--hit);font-size:var(--fs-sm);white-space:nowrap}
+.nvrow .nvs{width:auto;flex:none;padding:0 8px;font-size:var(--fs-sm)}
 /* printed wine list: always a paper document, light in both themes */
 #menu{width:min(54rem,calc(100vw - 16px))}
 .mwrap{display:flex;flex-direction:column;max-height:calc(100vh - 32px)}
@@ -2295,7 +2295,9 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
     var order = (Array.isArray(c.order) ? c.order : []).filter(function (id, i, a) { return navById[id] && a.indexOf(id) === i; });
     NAV.forEach(function (n) { if (order.indexOf(n.id) < 0) order.push(n.id); });
     var bar = (Array.isArray(c.bar) ? c.bar : NAV_DEFAULT_BAR).filter(function (id, i, a) { return navById[id] && a.indexOf(id) === i; }).slice(0, NAV_MAX_BAR);
-    return { order: order, bar: bar };
+    var hidden = (Array.isArray(c.hidden) ? c.hidden : []).filter(function (id) { return navById[id] && id !== 'settings'; });
+    bar = bar.filter(function (id) { return hidden.indexOf(id) < 0; });
+    return { order: order, bar: bar, hidden: hidden };
   }
   function navSave(cfg) { lsSet('wc_nav', JSON.stringify(cfg)); buildNav(); }
   var navPlaces = null;
@@ -2312,13 +2314,13 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
   function buildNav() {
     navPlaces = placesOn();
     var cfg = navCfg(), dock = $('dock'), wrap = dock.querySelector('.menuwrap'), more = $('moreMenu'), add = $('addBtn');
-    var inBar = {}; cfg.bar.forEach(function (id) { inBar[id] = 1; });
+    var inBar = {}, off = {}; cfg.bar.forEach(function (id) { inBar[id] = 1; }); cfg.hidden.forEach(function (id) { off[id] = 1; });
     /* every source button goes back into the holder, then the ones that are not in the bar go into the More menu */
     NAV.forEach(function (n) { if (n.src) navHolder.appendChild($(n.src)); });
     more.querySelectorAll('.mnx').forEach(function (x) { x.remove(); });
     var shown = [];
     cfg.order.forEach(function (id) {
-      var n = navById[id], b = dockBtn(n), ok = navAvail(n);
+      var n = navById[id], b = dockBtn(n), ok = navAvail(n) && !off[id];
       dock.insertBefore(b, wrap);
       b.hidden = !ok; b.classList.toggle('bar', !!inBar[id]); b.classList.toggle('x', !inBar[id]);
       if (!ok || inBar[id]) return;
@@ -2335,15 +2337,17 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
     var cfg = navCfg(), list = h('div', { 'class': 'nvlist', role: 'list' }), note = h('p', { 'class': 'note' });
     function collect() {
       var rows = Array.prototype.slice.call(list.children);
-      return { order: rows.map(function (r) { return r.dataset.id; }), bar: rows.filter(function (r) { return r.querySelector('input').checked; }).map(function (r) { return r.dataset.id; }) };
+      var pick = function (v) { return rows.filter(function (r) { return r.querySelector('select').value === v; }).map(function (r) { return r.dataset.id; }); };
+      return { order: rows.map(function (r) { return r.dataset.id; }), bar: pick('bar'), hidden: pick('hide') };
     }
     function persist() { var c = collect(); lsSet('wc_nav', JSON.stringify(c)); buildNav(); count(); }
-    function count() { var k = collect().bar.length; note.textContent = k + ' of ' + NAV_MAX_BAR + ' places in the bottom bar on a phone. Everything else is under More. A wide screen, such as a wall tablet, lists all of them down the left side in this order.'; }
+    function count() { var k = collect().bar.length; note.textContent = k + ' of ' + NAV_MAX_BAR + ' places in the bottom bar on a phone. Everything else is under More, and Hidden items are left out completely. A wide screen, such as a wall tablet, lists all of them down the left side in this order.'; }
     function row(id) {
       var n = navById[id], r = h('div', { 'class': 'nvrow', role: 'listitem' }); r.dataset.id = id;
       var handle = h('button', { type: 'button', 'class': 'nvh', 'aria-label': 'Drag to move ' + n.long, text: '⠿' });
-      var cb = h('input', { type: 'checkbox', 'aria-label': 'Show ' + n.long + ' in the bottom bar' }); cb.checked = cfg.bar.indexOf(id) >= 0;
-      cb.addEventListener('change', function () { if (cb.checked && collect().bar.length > NAV_MAX_BAR) { cb.checked = false; toast('The bottom bar holds ' + NAV_MAX_BAR + '. Turn one off first.'); return; } persist(); });
+      var cb = h('select', { 'class': 'in nvs', 'aria-label': 'Where ' + n.long + ' shows' }, h('option', { value: 'bar', text: 'In the bar' }), h('option', { value: 'more', text: 'In More' }), id === 'settings' ? null : h('option', { value: 'hide', text: 'Hidden' }));
+      cb.value = cfg.hidden.indexOf(id) >= 0 ? 'hide' : cfg.bar.indexOf(id) >= 0 ? 'bar' : 'more'; var was = cb.value;
+      cb.addEventListener('change', function () { if (cb.value === 'bar' && collect().bar.length > NAV_MAX_BAR) { cb.value = was; toast('The bottom bar holds ' + NAV_MAX_BAR + '. Move one to More first.'); return; } was = cb.value; persist(); });
       var move = function (d) { return function () { var sib = d < 0 ? r.previousElementSibling : r.nextElementSibling; if (!sib) return; if (d < 0) list.insertBefore(r, sib); else list.insertBefore(sib, r); persist(); }; };
       var up = h('button', { type: 'button', 'class': 'btn sm sq', 'aria-label': 'Move ' + n.long + ' up', text: '↑', onclick: move(-1) });
       var down = h('button', { type: 'button', 'class': 'btn sm sq', 'aria-label': 'Move ' + n.long + ' down', text: '↓', onclick: move(1) });
@@ -2359,7 +2363,7 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
       handle.addEventListener('pointerup', end); handle.addEventListener('pointercancel', end);
       r.appendChild(handle);
       r.appendChild(h('div', { 'class': 'nvn' }, h('span', { text: n.long }), n.id === 'places' ? h('small', { text: 'Only when storage places are on' }) : null));
-      r.appendChild(h('label', { 'class': 'chk' }, cb, ' Bar'));
+      r.appendChild(cb);
       r.appendChild(up); r.appendChild(down);
       return r;
     }

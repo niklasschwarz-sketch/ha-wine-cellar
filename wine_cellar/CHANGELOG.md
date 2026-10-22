@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.18.3
+- **Show or hide menu options.** In Settings, *Customise the menu*, each option now has a choice: *In the bar*, *In More* or *Hidden*. Hidden options are left out of the phone menu and the wide-screen side list completely. Settings itself can't be hidden, so you can always get back. *Reset to default* shows everything again.
+
 ## 0.18.2
 - **Drink is now a pick list.** The Drink button opens *Drink now*: the wines past their window first, then those at their best this year, then everything else that is ready, each with its bottle count. Tap one to open a bottle and log it. A search box appears when the list is long. It no longer filters the main list.
 
