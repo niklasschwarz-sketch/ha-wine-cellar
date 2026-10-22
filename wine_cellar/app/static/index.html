@@ -631,7 +631,7 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
   var cfg = { eurSek: 11, labelAi: false, autoPrices: false, sbProducts: 0, sbUpdated: null, settings: { country: '', currency: 'EUR', tempUnit: 'C', formats: 'auto', paper: 'A4', sekRate: 11 }, settingsSaved: false };
   var COUNTRY_LIST = null;
   var I18N = { code: 'en', dict: null, list: [] };
-  function browserLocale() { try { return (navigator.languages && navigator.languages[0]) || navigator.language || 'en'; } catch (e) { return 'en'; } }
+  function browserLocale() { if (I18N.code !== 'en') return I18N.code; try { return (navigator.languages && navigator.languages[0]) || navigator.language || 'en'; } catch (e) { return 'en'; } }
   function applyLocale() {
     var st = cfg.settings || {}, loc = browserLocale();
     if (st.formats === 'country' && st.country && COUNTRY_LIST) { var c = COUNTRY_LIST.filter(function (x) { return x.code === st.country; })[0]; if (c) loc = c.locale; }

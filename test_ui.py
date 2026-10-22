@@ -575,7 +575,7 @@ try:
         lg.on("pageerror", lambda e: errors.append(str(e)))
         lg.goto(BASE + "/")
         lg.wait_for_selector(".wine")
-        check("English by default", lg.locator("#dk_cellar").inner_text().strip() == "Cellar" and lg.evaluate("document.documentElement.lang") == "en")
+        check("English by default", lg.locator("#dkCellar").inner_text().strip() == "Cellar" and lg.evaluate("document.documentElement.lang") == "en")
         lg.click("#dk_settings")
         lg.wait_for_selector("dialog[open] select[aria-label='Language']")
         check("the language list offers Automatic, English and Svenska",
@@ -583,12 +583,12 @@ try:
         with lg.expect_navigation():
             lg.select_option("dialog[open] select[aria-label='Language']", "sv")
         lg.wait_for_selector(".wine")
-        check("Swedish: the menu and the page are translated", lg.locator("#dk_cellar").inner_text().strip() == "Källare" and lg.locator("#dk_settings").inner_text().strip() == "Inställningar" and lg.evaluate("document.documentElement.lang") == "sv", lg.locator("#dk_cellar").inner_text())
+        check("Swedish: the menu and the page are translated", lg.locator("#dkCellar").inner_text().strip() == "Källare" and lg.locator("#dk_settings").inner_text().strip() == "Inställningar" and lg.evaluate("document.documentElement.lang") == "sv", lg.locator("#dkCellar").inner_text())
         check("Swedish: a number inside a line keeps its value", "flaskor" in lg.locator("#k-bottles-s, .kpi, body").first.inner_text() or "flaskor" in lg.inner_text("body"))
         check("Swedish: wine names are not translated", "Paste Test" in lg.inner_text("body") or "Drop Test" in lg.inner_text("body"))
         lg.reload()
         lg.wait_for_selector(".wine")
-        check("the language is remembered", lg.locator("#dk_cellar").inner_text().strip() == "Källare")
+        check("the language is remembered", lg.locator("#dkCellar").inner_text().strip() == "Källare")
         lg.evaluate("localStorage.removeItem('wc_lang')")
         lg.close()
 

@@ -85,6 +85,8 @@ EXTRA = [
     "Pasted {0} row", "Pasted {0} rows", "Saved {0} change", "Saved {0} changes",
     "Saved {0}. {1} row needs attention, see the Status column", "Saved {0}. {1} rows need attention, see the Status column",
     "Pasted {0} row. {1} colour or style values were not recognised and skipped", "Pasted {0} rows. {1} colour or style values were not recognised and skipped",
+    "To", "{0} to {1}", "Anywhere", "Bottles that are now", "Move many bottles", "Move them to", "{0} bottles of {1} wines will move.",
+    "No filter is set, so this works on all {0} wines. Close this and filter first (colour, region, producer, search…) to move only some.",
     "Value set to ", "Deleted ", "Reading ", "Restoring ", "Undo", "Error {0}",
 ]
 PREFIXES_OK = {"Value set to ", "Deleted ", "Reading ", "Restoring "}
