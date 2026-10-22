@@ -33,6 +33,8 @@ DB_TYPE = os.environ.get("DB_TYPE", "postgres")
 PORT = int(os.environ.get("PORT", "8099"))
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(HERE, "static")
+LANG_DIR = os.path.join(HERE, "lang")
+LANG_CODE = re.compile(r"^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$")
 # Home Assistant ingress reaches add-ons from the Supervisor proxy only.
 ALLOWED_IPS = {"172.30.32.2", "127.0.0.1", "::1"}
 ALLOW_ANY = os.environ.get("ALLOW_ANY", "") == "1"
@@ -2796,6 +2798,10 @@ class Handler(BaseHTTPRequestHandler):
         if not parts or parts[0] != "api":
             raise ApiError(404, "Not found")
         parts = parts[1:]
+        if parts == ["languages"] and method == "GET":
+            return self._send(200, self._languages())
+        if len(parts) == 2 and parts[0] == "lang" and method == "GET":
+            return self._language(parts[1])
         if parts == ["health"] and method == "GET":
             db.run("SELECT 1 AS ok", fetch="one")
             return self._send(200, {"ok": True})
@@ -2946,6 +2952,35 @@ class Handler(BaseHTTPRequestHandler):
         if parts == ["import"] and method == "POST":
             return self._send(200, import_csv(self._body()))
         raise ApiError(404, "Not found")
+
+    def _languages(self):
+        """Language files in lang/: one JSON per language (see lang/README.md)."""
+        out = []
+        try:
+            names = sorted(os.listdir(LANG_DIR))
+        except OSError:
+            names = []
+        for fn in names:
+            code = fn[:-5] if fn.endswith(".json") else ""
+            if not LANG_CODE.match(code):
+                continue
+            try:
+                with open(os.path.join(LANG_DIR, fn), encoding="utf-8") as f:
+                    meta = json.load(f)
+                out.append({"code": code, "name": str(meta.get("_name") or code)[:40]})
+            except (OSError, ValueError):
+                log("Skipping unreadable language file", fn)
+        return {"languages": out}
+
+    def _language(self, code):
+        if not LANG_CODE.match(code):
+            raise ApiError(404, "Not found")
+        path = os.path.join(LANG_DIR, code + ".json")
+        try:
+            with open(path, "rb") as f:
+                return self._send(200, f.read(), "application/json; charset=utf-8", "no-cache")
+        except OSError:
+            raise ApiError(404, "Not found")
 
     def _vendor(self, rel):
         """Files the add-on downloaded at build time (the label reader). Nothing else is served."""

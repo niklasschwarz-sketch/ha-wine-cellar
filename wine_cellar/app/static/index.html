@@ -639,7 +639,7 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
     var money = function (a, b) { return new Intl.NumberFormat(LOC, { style: 'currency', currency: CUR, minimumFractionDigits: a, maximumFractionDigits: b }); };
     eur0 = money(0, 0); eur1 = money(0, 1); eur2 = money(2, 2);
     sek = new Intl.NumberFormat('sv-SE', { style: 'currency', currency: 'SEK', maximumFractionDigits: 0 });
-    document.documentElement.setAttribute('lang', LOC.split('-')[0]);
+    document.documentElement.setAttribute('lang', I18N.code !== 'en' ? I18N.code : LOC.split('-')[0]);
     var ps = document.getElementById('pageSize'); if (!ps) { ps = document.createElement('style'); ps.id = 'pageSize'; document.head.appendChild(ps); }
     ps.textContent = '@media print{@page{size:' + (st.paper === 'Letter' ? 'letter' : 'A4') + ';margin:16mm}}';
   }
@@ -1563,6 +1563,11 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
       currency.addEventListener('change', sync); sync();
       var plChk = h('input', { type: 'checkbox', id: 's_places' }); plChk.checked = !!cur.places;
       var snChk = h('input', { type: 'checkbox', id: 's_notes' }); snChk.checked = !!cur.shelfNotes;
+      var langSel = h('select', { 'class': 'in', 'aria-label': 'Language' }, h('option', { value: 'auto', text: 'Automatic' }));
+      I18N.list.forEach(function (l) { langSel.appendChild(h('option', { value: l.code, text: l.name, translate: 'no' })); });
+      langSel.value = lsGet('wc_lang') || 'auto'; if (!langSel.value) langSel.value = 'auto';
+      langSel.onchange = function () { lsSet('wc_lang', langSel.value === 'auto' ? '' : langSel.value); location.reload(); };
+      var langBox = h('div', { 'class': 'f', style: 'gap:6px' }, h('div', { 'class': 'lab', text: 'Language' }), langSel);
       var plBox = h('div', { 'class': 'f', style: 'gap:8px' },
         h('label', { 'for': 's_places', style: 'display:flex;gap:10px;align-items:flex-start;min-height:44px' }, plChk, h('span', {}, h('b', { text: 'Use several storage places' }), h('span', { 'class': 'note', style: 'display:block', text: 'Fridges, cellars, a bar: see where each bottle is, move bottles between places and choose where a bottle comes from when you open it. Off: one simple shelf text per wine.' }))),
         h('label', { 'for': 's_notes', style: 'display:flex;gap:10px;align-items:flex-start;min-height:44px' }, snChk, h('span', {}, h('b', { text: 'Shelf notes' }), h('span', { 'class': 'note', style: 'display:block', text: 'A short note per place, like “shelf 3”.' }))),
@@ -1582,8 +1587,9 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
         h('p', { 'class': 'note', text: first ? 'Welcome. Choose where you live so prices, dates and units look right. You can change this later under More, Settings.' : 'Choose where you live. Picking a country suggests the currency, units and paper size, and you can still change each one.' }),
         fld('Country', country), fld('Currency', currency), convBox, sekBox, fld('Temperature unit', unit), fld('Numbers and dates', fm), fld('Paper size for printing', paper), plBox,
         h('div', { 'class': 'f' }, h('div', { 'class': 'lab', text: 'On this device' }),
+          langBox,
           h('div', { 'class': 'row' }, h('button', { type: 'button', 'class': 'btn', text: 'Appearance…', onclick: openAppearance }), h('button', { type: 'button', 'class': 'btn', text: 'Customise the menu…', onclick: openNavEditor })),
-          h('p', { 'class': 'note', text: 'Light or dark, text size, and which options sit in the bottom bar. These are kept in this browser only.' })), msg), [save]);
+          h('p', { 'class': 'note', text: 'Language, light or dark, text size, and which options sit in the bottom bar. These are kept in this browser only.' })), msg), [save]);
     }).catch(function (e) { toast(e.message); });
   }
   function openClimateSettings() {
@@ -3035,6 +3041,76 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
     };
   }
 
+  /* ---------- translation ----------
+     Text is translated where it is shown: the English words are the keys of a language file
+     (lang/<code>.json), numbers inside a line are written {0}, {1}. Anything without an entry stays English.
+     To add a language see lang/README.md. */
+  var I18N = { code: 'en', dict: null, list: [] };
+  var NUMRE = /\d+(?:[.,]\d+)*/g;
+  function tr(s) {
+    var d = I18N.dict; if (!d || !s) return s;
+    var m = /^(\s*)([\s\S]*?)(\s*)$/.exec(s), core = m[2]; if (!core) return s;
+    var nums = [], key = core.replace(NUMRE, function (x) { nums.push(x); return '{' + (nums.length - 1) + '}'; });
+    if (!Object.prototype.hasOwnProperty.call(d, key)) return s;
+    var v = d[key]; if (typeof v !== 'string' || !v) return s;
+    return m[1] + v.replace(/\{(\d+)\}/g, function (x, i) { return nums[i] != null ? nums[i] : x; }) + m[3];
+  }
+  var TR_ATTRS = ['placeholder', 'title', 'aria-label', 'alt'];
+  var trSeen = new WeakMap(), trCollect = null;
+  function trSkip(n) { var p = n.nodeType === 3 ? n.parentNode : n; return !p || !p.closest || !!p.closest('script,style,textarea,[translate="no"]'); }
+  function trNote(s) { if (trCollect && /[A-Za-zÀ-ɏ]{2}/.test(s)) trCollect[s.trim().replace(NUMRE, function (x, i) { return '{#}'; })] = 1; }
+  function trText(n) {
+    var v = n.nodeValue; if (trSeen.get(n) === v || trSkip(n)) return;
+    var out = tr(v); trSeen.set(n, out); if (trCollect) trNote(v); if (out !== v) n.nodeValue = out;
+  }
+  function trAttrs(el) {
+    if (!el.getAttribute || trSkip(el)) return;
+    TR_ATTRS.forEach(function (a) {
+      var v = el.getAttribute(a); if (v == null) return;
+      var seen = el.__trs || (el.__trs = {}); if (seen[a] === v) return;
+      var out = tr(v); seen[a] = out; if (trCollect) trNote(v); if (out !== v) el.setAttribute(a, out);
+    });
+  }
+  function trWalk(root) {
+    if (root.nodeType === 3) return trText(root);
+    if (root.nodeType !== 1 && root.nodeType !== 9) return;
+    var w = document.createTreeWalker(root, 5), n = w.currentNode;
+    if (n.nodeType === 1) trAttrs(n);
+    while ((n = w.nextNode())) { if (n.nodeType === 3) trText(n); else trAttrs(n); }
+  }
+  function trStart() {
+    if (!I18N.dict && !trCollect) return;
+    trWalk(document.documentElement);
+    new MutationObserver(function (list) {
+      list.forEach(function (m) {
+        if (m.type === 'characterData') trText(m.target);
+        else if (m.type === 'attributes') trAttrs(m.target);
+        else m.addedNodes.forEach(trWalk);
+      });
+    }).observe(document.documentElement, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: TR_ATTRS });
+    ['confirm', 'alert', 'prompt'].forEach(function (k) { var o = window[k]; window[k] = function (m, x) { return o.call(window, tr(String(m)), x); }; });
+  }
+  function pickLang(list) {
+    var want = lsGet('wc_lang'), codes = list.map(function (l) { return l.code; });
+    if (want && want !== 'auto') return codes.indexOf(want) >= 0 ? want : 'en';
+    var prefs = []; try { prefs = navigator.languages || [navigator.language]; } catch (e) {}
+    for (var i = 0; i < prefs.length; i++) {
+      var p = String(prefs[i] || '').toLowerCase();
+      if (codes.indexOf(p) >= 0) return p;
+      if (codes.indexOf(p.split('-')[0]) >= 0) return p.split('-')[0];
+    }
+    return 'en';
+  }
+  function loadLang() {
+    try { if (/[?&]i18n=collect/.test(location.search)) { trCollect = {}; window.__untranslated = trCollect; } } catch (e) {}
+    if (demoMode) return Promise.resolve().then(trStart);
+    return api('GET', 'api/languages').then(function (d) {
+      I18N.list = d.languages || [];
+      var code = pickLang(I18N.list); if (code === 'en') return null;
+      return api('GET', 'api/lang/' + code).then(function (f) { I18N.code = code; I18N.dict = f.strings || {}; document.documentElement.setAttribute('lang', code); });
+    }).catch(function () {}).then(trStart);
+  }
+
   /* ---------- start ---------- */
   var loaded = false;
   function load() {
@@ -3042,6 +3118,7 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
   }
   fetch(base + 'api/health').then(function (r) { return r.ok ? r.json() : Promise.reject(); }).then(function (j) { if (!j || !j.ok) throw 0; })
     .catch(function () { demoMode = true; demoApi = makeDemo(); var d = $('demo'); d.style.display = 'block'; d.textContent = 'Preview with sample wines. Changes here are not saved. Install the add-on to use your own cellar.'; })
+    .then(loadLang)
     .then(function () { return load(); })
     .catch(function (e) { $('take').textContent = 'Could not load the cellar: ' + (e && e.message ? e.message : 'unknown error') + '. Check the add-on log and its database settings.'; });
 })();
