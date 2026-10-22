@@ -23,7 +23,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, quote, urlparse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import drink  # noqa: E402
+import mqtt  # noqa: E402
 import pairing  # noqa: E402
+
+VERSION = "0.16.0"  # keep in step with wine_cellar/config.yaml (test_api.py checks it)
 
 DB_TYPE = os.environ.get("DB_TYPE", "postgres")
 PORT = int(os.environ.get("PORT", "8099"))
@@ -51,6 +55,14 @@ LABEL_MAX = 4 * 1024 * 1024
 
 HA_API = os.environ.get("HA_API", "http://supervisor/core/api").rstrip("/")
 HA_TOKEN = os.environ.get("SUPERVISOR_TOKEN", "")
+SUPERVISOR_API = os.environ.get("SUPERVISOR_API", "http://supervisor").rstrip("/")
+# Home Assistant sensors over MQTT. The broker is found through the Supervisor; MQTT_HOST is only for tests and special setups.
+MQTT_HOST = os.environ.get("MQTT_HOST", "").strip()
+MQTT_PORT = int(os.environ.get("MQTT_PORT", "1883") or 1883)
+MQTT_USER = os.environ.get("MQTT_USER", "")
+MQTT_PASSWORD = os.environ.get("MQTT_PASSWORD", "")
+SENSORS_SECS = float(os.environ.get("HA_SENSORS_SECS", "60"))
+ALERT_CHECK_SECS = float(os.environ.get("DRINK_ALERT_CHECK_SECS", "600"))
 CLIMATE_TEMP = os.environ.get("CLIMATE_TEMP_ENTITY", "").strip()
 CLIMATE_HUM = os.environ.get("CLIMATE_HUMIDITY_ENTITY", "").strip()
 
@@ -382,6 +394,7 @@ def wine_json(r, stock=None):
         "quantity": r.get("quantity") or 0,
         "begin": r.get("begin_consume"),
         "end": r.get("end_consume"),
+        "status": drink.status(r.get("begin_consume"), r.get("end_consume")),
         "likePercent": r.get("like_percent"),
         "likeVotes": r.get("like_votes") or 0,
         "location": r.get("location") or "",
@@ -1521,18 +1534,528 @@ def climate_worker():
         time.sleep(CHECK_SECS)
 
 
-def export_json():
+# ---------------------------------------------------------------- weekly drink alert
+ALERT_DEFAULT = {"enabled": False, "notifyService": "", "weekday": 4, "hour": 16}  # Friday afternoon, before the weekend (0 is Monday)
+_alert_retry = [0.0]
+_tz_cache = {"t": 0.0, "tz": None}
+
+
+def alert_settings():
+    d = dict(ALERT_DEFAULT)
+    try:
+        saved = json.loads(meta_get("drink_alerts") or "{}")
+    except ValueError:
+        saved = {}
+    if isinstance(saved, dict):
+        d.update({k: v for k, v in saved.items() if k in d})
+    return d
+
+
+def save_alert_settings(data):
+    cur = alert_settings()
+    if "enabled" in data:
+        cur["enabled"] = bool(data.get("enabled"))
+    if "notifyService" in data:
+        v = txt(data.get("notifyService"), 80).lower()
+        if v and not NOTIFY_RE.match(v):
+            raise ApiError(400, "The notification service should look like notify.mobile_app_my_phone, or be empty for a message inside Home Assistant")
+        cur["notifyService"] = v
+    if "weekday" in data:
+        cur["weekday"] = clean_int(data.get("weekday"), 0, 6, "Day of the week")
+    if "hour" in data:
+        cur["hour"] = clean_int(data.get("hour"), 0, 23, "Hour")
+    meta_set("drink_alerts", json.dumps(cur))
+    return drink_alert_state()
+
+
+def drink_groups(year=None):
+    """Wines in stock that are in the last year of their window, and wines that are past it."""
+    year = year or drink.this_year()
+    soon, past = [], []
+    for r in db.run("SELECT * FROM wc_wines WHERE quantity > 0", fetch="all"):
+        s = drink.status(r.get("begin_consume"), r.get("end_consume"), year)
+        if s == "soon":
+            soon.append(r)
+        elif s == "past":
+            past.append(r)
+    soon.sort(key=lambda r: label_of(r).lower())
+    past.sort(key=lambda r: (-(r.get("end_consume") or 0), label_of(r).lower()))
+    return soon, past
+
+
+def _bottles(rows):
+    return sum(r["quantity"] or 0 for r in rows)
+
+
+def _line(r):
+    q = r["quantity"] or 0
+    return label_of(r) + (" ×%d" % q if q > 1 else "")
+
+
+def drink_digest_text(soon, past, cap=8):
+    parts = []
+    for title, rows in (("Best this year", soon), ("Past their window", past)):
+        if not rows:
+            continue
+        n = _bottles(rows)
+        lines = ["• " + _line(r) for r in rows[:cap]]
+        if len(rows) > cap:
+            lines.append("and %d more wines" % (len(rows) - cap))
+        parts.append("%s (%d %s):\n%s" % (title, n, "bottle" if n == 1 else "bottles", "\n".join(lines)))
+    return "\n\n".join(parts)
+
+
+def drink_alert_state():
+    soon, past = drink_groups()
+    return dict(alert_settings(), soonBottles=_bottles(soon), pastBottles=_bottles(past), preview=drink_digest_text(soon, past))
+
+
+def send_drink_alert(test=False):
+    """Send the digest. Nothing is sent when there is nothing to report, unless it is a test."""
+    soon, past = drink_groups()
+    text = drink_digest_text(soon, past)
+    title = "Wine cellar: time to drink"
+    if not text:
+        if not test:
+            return {"sent": False, "message": ""}
+        title, text = "Wine cellar: test", "No bottle is past its window or in the last year of it right now. Alerts are working."
+    send_notification(title, text, alert_settings()["notifyService"], "wine_cellar_drink")
+    return {"sent": True, "title": title, "message": text}
+
+
+def local_now():
+    """The time in the Home Assistant time zone. The add-on container itself usually runs in UTC."""
+    if time.time() - _tz_cache["t"] > 3600:
+        try:
+            name = _ha_get("/config").get("time_zone")
+            from zoneinfo import ZoneInfo
+            _tz_cache.update(t=time.time(), tz=ZoneInfo(name) if name else None)
+        except Exception:
+            _tz_cache["t"] = time.time() - 3000  # try again in ten minutes
+    tz = _tz_cache["tz"]
+    return datetime.now(tz) if tz else datetime.now()
+
+
+def drink_alert_check():
+    """One pass of the weekly alert: on the chosen day, from the chosen hour, once."""
+    st = alert_settings()
+    if not st["enabled"] or time.time() < _alert_retry[0]:
+        return False
+    n = local_now()
+    today = n.strftime("%Y-%m-%d")
+    if n.weekday() != st["weekday"] or n.hour < st["hour"] or meta_get("drink_alert_last") == today:
+        return False
+    try:
+        send_drink_alert()
+    except Exception as e:
+        log("Could not send the drink alert:", type(e).__name__)
+        _alert_retry[0] = time.time() + 1800
+        return False
+    meta_set("drink_alert_last", today)
+    return True
+
+
+def drink_alert_worker():
+    time.sleep(min(30.0, ALERT_CHECK_SECS))
+    while True:
+        try:
+            drink_alert_check()
+        except Exception as e:
+            log("Drink alert error:", type(e).__name__, str(e)[:160])
+        time.sleep(ALERT_CHECK_SECS)
+
+
+# ---------------------------------------------------------------- Home Assistant sensors (MQTT discovery)
+# key, name, icon, unit ("$" is the cellar currency)
+HA_SENSORS = [
+    ("bottles", "Bottles", "mdi:bottle-wine", "bottles"),
+    ("wines", "Wines", "mdi:glass-wine", "wines"),
+    ("ready", "Ready to drink", "mdi:check-circle-outline", "bottles"),
+    ("drink_soon", "Drink this year", "mdi:clock-alert-outline", "bottles"),
+    ("past_peak", "Past peak", "mdi:alert-circle-outline", "bottles"),
+    ("hold", "Hold", "mdi:timer-sand", "bottles"),
+    ("value", "Estimated value", "mdi:cash-multiple", "$"),
+]
+SENSOR_LISTS = {"drink_soon": "soonWines", "past_peak": "pastWines"}
+STATE_TOPIC = "wine_cellar/state"
+LIST_TOPIC = "wine_cellar/list/%s"
+DISCOVERY_TOPIC = "homeassistant/sensor/wine_cellar/%s/config"
+NO_BROKER = ("No MQTT broker was found. Install the Mosquitto broker add-on and add the MQTT integration in Home Assistant, then restart Wine Cellar.")
+_sensors = {"hash": "", "sent": False, "unit": "", "last": None, "error": ""}
+_sensors_lock = threading.Lock()
+
+
+def sensors_enabled():
+    try:
+        return bool((json.loads(meta_get("ha_sensors") or "{}") or {}).get("enabled"))
+    except ValueError:
+        return False
+
+
+def cellar_numbers():
+    year = drink.this_year()
+    out = {"bottles": 0, "wines": 0, "ready": 0, "drink_soon": 0, "past_peak": 0, "hold": 0, "value": 0.0}
+    soon, past = [], []
+    for r in db.run("SELECT * FROM wc_wines WHERE quantity > 0", fetch="all"):
+        q = r["quantity"] or 0
+        s = drink.status(r.get("begin_consume"), r.get("end_consume"), year)
+        out["wines"] += 1
+        out["bottles"] += q
+        out["value"] += q * (r.get("value") or 0)
+        if drink.is_ready(s):
+            out["ready"] += q
+        if s == "soon":
+            out["drink_soon"] += q
+            soon.append(r)
+        elif s == "past":
+            out["past_peak"] += q
+            past.append(r)
+        elif s == "hold":
+            out["hold"] += q
+    out["value"] = round(out["value"], 2)
+    out["currency"] = app_settings()[0]["currency"]
+    soon.sort(key=lambda r: label_of(r).lower())
+    past.sort(key=lambda r: (-(r.get("end_consume") or 0), label_of(r).lower()))
+    out["soonWines"] = [_line(r) for r in soon[:20]]
+    out["pastWines"] = [_line(r) for r in past[:20]]
+    return out
+
+
+def mqtt_broker():
+    """Where the MQTT broker is. Home Assistant tells the add-on through the Supervisor (config.yaml asks for the mqtt service)."""
+    if MQTT_HOST:
+        return {"host": MQTT_HOST, "port": MQTT_PORT, "user": MQTT_USER, "password": MQTT_PASSWORD, "ssl": False}
+    if not HA_TOKEN:
+        return None
+    try:
+        req = urllib.request.Request(SUPERVISOR_API + "/services/mqtt", headers={"Authorization": "Bearer " + HA_TOKEN, "User-Agent": USER_AGENT})
+        with urllib.request.urlopen(req, timeout=8) as r:
+            d = (json.loads(r.read().decode("utf-8")) or {}).get("data") or {}
+    except Exception:
+        return None
+    if not d.get("host"):
+        return None
+    return {"host": d["host"], "port": int(d.get("port") or 1883), "user": d.get("username") or "", "password": d.get("password") or "", "ssl": bool(d.get("ssl"))}
+
+
+def _sensor_discovery(unit):
+    dev = {"identifiers": ["wine_cellar"], "name": "Wine Cellar", "manufacturer": "Wine Cellar add-on", "model": "Cellar", "sw_version": VERSION}
+    msgs = []
+    for key, name, icon, u in HA_SENSORS:
+        cfg = {"name": name, "unique_id": "wine_cellar_" + key, "state_topic": STATE_TOPIC, "value_template": "{{ value_json.%s }}" % key,
+               "icon": icon, "state_class": "measurement", "unit_of_measurement": unit if u == "$" else u, "device": dev}
+        if key in SENSOR_LISTS:
+            cfg["json_attributes_topic"] = LIST_TOPIC % key
+        msgs.append((DISCOVERY_TOPIC % key, json.dumps(cfg), True))
+    return msgs
+
+
+def _publish(msgs):
+    b = mqtt_broker()
+    if not b:
+        raise mqtt.MqttError(NO_BROKER)
+    mqtt.publish_all(b["host"], b["port"], msgs, b["user"], b["password"], b["ssl"])
+
+
+def ha_sensors_publish(force=False):
+    """Tell Home Assistant the numbers, when they changed. The entities are announced again after a restart or a currency change."""
+    if not sensors_enabled():
+        return False
+    num = cellar_numbers()
+    state = {k: num[k] for k, _, _, _ in HA_SENSORS}
+    digest = json.dumps([state, num["soonWines"], num["pastWines"], num["currency"]], sort_keys=True)
+    with _sensors_lock:
+        announce = force or not _sensors["sent"] or _sensors["unit"] != num["currency"]
+        if not announce and digest == _sensors["hash"]:
+            return False
+        msgs = _sensor_discovery(num["currency"]) if announce else []
+        msgs.append((STATE_TOPIC, json.dumps(state), True))
+        for key, field in SENSOR_LISTS.items():
+            msgs.append((LIST_TOPIC % key, json.dumps({"wines": num[field]}), True))
+        try:
+            _publish(msgs)
+        except mqtt.MqttError as e:
+            _sensors.update(sent=False, hash="", error=str(e))
+            raise
+        _sensors.update(sent=True, hash=digest, unit=num["currency"], last=iso(now()), error="")
+    return True
+
+
+def ha_sensors_remove():
+    """Empty retained messages make Home Assistant forget the entities."""
+    msgs = [(DISCOVERY_TOPIC % key, b"", True) for key, _, _, _ in HA_SENSORS] + [(STATE_TOPIC, b"", True)] + [(LIST_TOPIC % k, b"", True) for k in SENSOR_LISTS]
+    with _sensors_lock:
+        _sensors.update(sent=False, hash="", unit="")
+        _publish(msgs)
+
+
+def ha_sensors_state():
+    num = cellar_numbers()
+    return {"enabled": sensors_enabled(), "broker": bool(mqtt_broker()), "last": _sensors["last"], "error": _sensors["error"],
+            "values": {k: num[k] for k, _, _, _ in HA_SENSORS}, "currency": num["currency"], "entities": ["sensor.wine_cellar_" + k for k, _, _, _ in HA_SENSORS]}
+
+
+def save_ha_sensors(data):
+    want = bool(data.get("enabled"))
+    warning = ""
+    if want:
+        if not mqtt_broker():
+            raise ApiError(409, NO_BROKER)
+        meta_set("ha_sensors", json.dumps({"enabled": True}))
+        try:
+            ha_sensors_publish(force=True)
+        except mqtt.MqttError as e:
+            meta_set("ha_sensors", json.dumps({"enabled": False}))
+            raise ApiError(502, str(e))
+    else:
+        was = sensors_enabled()
+        meta_set("ha_sensors", json.dumps({"enabled": False}))
+        if was:
+            try:
+                ha_sensors_remove()
+            except mqtt.MqttError as e:
+                warning = "Switched off, but the sensors could not be removed from Home Assistant: %s. Delete them under Settings, Devices, MQTT if they stay." % e
+    out = ha_sensors_state()
+    out["warning"] = warning
+    return out
+
+
+def ha_sensors_worker():
+    time.sleep(min(20.0, SENSORS_SECS))
+    while True:
+        try:
+            ha_sensors_publish()
+        except mqtt.MqttError as e:
+            log("Could not update the Home Assistant sensors:", str(e)[:160])
+        except Exception as e:
+            log("Sensor update error:", type(e).__name__, str(e)[:160])
+        time.sleep(SENSORS_SECS)
+
+
+# ---------------------------------------------------------------- full copy and restore
+def export_json(pictures=True):
     sm = stock_map()
     wines = [wine_json(r, sm.get(r["id"], [])) for r in db.run("SELECT * FROM wc_wines ORDER BY id", fetch="all")]
-    pics = {r["wine_id"]: r["source"] for r in db.run("SELECT wine_id, source FROM wc_images WHERE data IS NOT NULL", fetch="all")}
+    pics = {r["wine_id"]: r for r in db.run("SELECT wine_id, source, mime, source_url, credit, data FROM wc_images WHERE data IS NOT NULL", fetch="all")}
     for w in wines:
-        w["picture"] = pics.get(w["id"], "")
+        p = pics.get(w["id"])
+        w["picture"] = p["source"] if p else ""
+        if p and pictures:
+            w.update(pictureMime=p.get("mime") or "image/jpeg", pictureUrl=p.get("source_url") or "", pictureCredit=p.get("credit") or "",
+                     pictureData=base64.b64encode(bytes(p["data"])).decode("ascii"))
     checkins = db.run("SELECT * FROM wc_checkins ORDER BY id", fetch="all")
     for c in checkins:
         c["ts"] = iso(c.get("ts"))
-    doc = {"app": "wine-cellar", "exported": iso(now()), "wines": wines, "checkins": checkins, "places": places_state(readings=False)["places"],
-           "tags": list_tags(), "reviews": [review_json(r) for r in db.run("SELECT * FROM wc_reviews ORDER BY id", fetch="all")]}
+    doc = {"app": "wine-cellar", "version": VERSION, "exported": iso(now()), "picturesIncluded": bool(pictures), "wines": wines, "checkins": checkins,
+           "places": places_state(readings=False)["places"], "tags": list_tags(), "reviews": [review_json(r) for r in db.run("SELECT * FROM wc_reviews ORDER BY id", fetch="all")],
+           "settings": {"app": app_settings()[0], "climate": climate_settings(), "alerts": alert_settings()}}
     return json.dumps(doc, ensure_ascii=False, indent=1).encode("utf-8")
+
+
+def _int(v, default=None):
+    try:
+        return int(float(str(v).strip()))
+    except (TypeError, ValueError):
+        return default
+
+
+def _rows(doc, key):
+    v = doc.get(key)
+    return [x for x in v if isinstance(x, dict)] if isinstance(v, list) else []
+
+
+def _restored_settings(saved):
+    """Settings from a copy, checked one by one. Anything odd is left out, so the current value stays."""
+    out = {}
+    if not isinstance(saved, dict):
+        return out
+    a = saved.get("app")
+    if isinstance(a, dict):
+        d = {}
+        if a.get("country") in COUNTRY_CODES or a.get("country") == "":
+            d["country"] = a.get("country")
+        if a.get("currency") in CURRENCIES:
+            d["currency"] = a["currency"]
+        if a.get("tempUnit") in ("C", "F"):
+            d["tempUnit"] = a["tempUnit"]
+        if a.get("formats") in ("auto", "country"):
+            d["formats"] = a["formats"]
+        if a.get("paper") in ("A4", "Letter"):
+            d["paper"] = a["paper"]
+        if num(a.get("sekRate"), None) and 0 < num(a.get("sekRate"), None) <= 100000:
+            d["sekRate"] = num(a.get("sekRate"), None)
+        for k in ("places", "shelfNotes"):
+            if k in a:
+                d[k] = bool(a[k])
+        out["app_settings"] = dict(app_settings()[0], **d)
+    c = saved.get("climate")
+    if isinstance(c, dict):
+        cur = climate_settings()
+        for k in ("tempEntity", "humidityEntity"):
+            v = txt(c.get(k), 80).lower()
+            if k in c and (not v or ENTITY_RE.match(v)):
+                cur[k] = v
+        v = txt(c.get("notifyService"), 80).lower()
+        if "notifyService" in c and (not v or NOTIFY_RE.match(v)):
+            cur["notifyService"] = v
+        for k in ("show", "notify"):
+            if k in c:
+                cur[k] = bool(c[k])
+        for lo, hi in (("tempMin", "tempMax"), ("humidityMin", "humidityMax")):
+            a1, b1 = num(c.get(lo), None), num(c.get(hi), None)
+            if a1 is not None and b1 is not None and a1 < b1:
+                cur[lo], cur[hi] = a1, b1
+        out["climate_settings"] = cur
+    al = saved.get("alerts")
+    if isinstance(al, dict):
+        cur = alert_settings()
+        v = txt(al.get("notifyService"), 80).lower()
+        if "notifyService" in al and (not v or NOTIFY_RE.match(v)):
+            cur["notifyService"] = v
+        if "enabled" in al:
+            cur["enabled"] = bool(al["enabled"])
+        for k, hi in (("weekday", 6), ("hour", 23)):
+            n = _int(al.get(k))
+            if n is not None and 0 <= n <= hi:
+                cur[k] = n
+        out["drink_alerts"] = cur
+    return out
+
+
+def restore_backup(raw, confirm=""):
+    """Replace everything in the cellar with a full copy made by this add-on. All or nothing."""
+    if confirm != "replace":
+        raise ApiError(400, "Restoring replaces everything in the cellar. Confirm to go on.")
+    try:
+        doc = json.loads(raw.decode("utf-8-sig"))
+    except (ValueError, UnicodeDecodeError):
+        raise ApiError(400, "That file is not a Wine Cellar copy. It is not valid JSON.")
+    if not isinstance(doc, dict) or doc.get("app") != "wine-cellar" or not isinstance(doc.get("wines"), list):
+        raise ApiError(400, "That file is not a full copy made by Wine Cellar (Import / export, Download full copy).")
+    stamp = now()
+    skipped = 0
+    place_rows, place_ids = [], set()
+    for i, p in enumerate(_rows(doc, "places")):
+        pid, name = _int(p.get("id")), txt(p.get("name"), 80)
+        if not pid or pid <= 0 or pid in place_ids or not name:
+            skipped += 1
+            continue
+        place_ids.add(pid)
+        kind = p.get("kind") if p.get("kind") in PLACE_KINDS else "other"
+        place_rows.append((pid, name, kind, i, txt(p.get("tempEntity"), 80) or None, txt(p.get("humEntity"), 80) or None))
+    wine_rows, stock_rows, image_rows, wine_ids, iwines, stocked = [], [], [], set(), set(), {}
+    for w in _rows(doc, "wines"):
+        wid, producer = _int(w.get("id")), txt(w.get("producer"), 200)
+        if not wid or wid <= 0 or wid in wine_ids or not producer:
+            skipped += 1
+            continue
+        wine_ids.add(wid)
+        color = w.get("color") if w.get("color") in COLORS else "Red"
+        vin = _int(w.get("vintage"))
+        vin = vin if vin and 1000 < vin < 3000 else None
+        iw = txt(w.get("iwine"), 40) or None
+        if iw in iwines:
+            iw = None
+        if iw:
+            iwines.add(iw)
+        window = []
+        for k in ("begin", "end"):
+            y = _int(w.get(k))
+            window.append(y if y and 1000 < y < 3000 else None)
+        lp = num(w.get("likePercent"), None)
+        qty = max(0, min(_int(w.get("quantity"), 0), 99999))
+        ean = re.sub(r"\D", "", str(w.get("ean") or ""))
+        wine_rows.append((wid, iw, color, txt(w.get("type"), 80) or color, vin, producer, txt(w.get("wine"), 300), txt(w.get("varietal"), 300),
+                          txt(w.get("designation"), 300), txt(w.get("vineyard"), 300), txt(w.get("country"), 300), txt(w.get("region"), 300),
+                          txt(w.get("subregion"), 300), txt(w.get("appellation"), 300), txt(w.get("size"), 40) or "750ml", txt(w.get("currency"), 8) or "EUR",
+                          max(0.0, num(w.get("value"))), max(0.0, num(w.get("price"))), qty, window[0], window[1], lp, _int(w.get("likeVotes"), 0),
+                          txt(w.get("location"), 300), txt(w.get("notes"), 2000), ean if 8 <= len(ean) <= 14 else "", stamp, stamp))
+        have = {}
+        for s in (w.get("stock") if isinstance(w.get("stock"), list) else []):
+            pid, q = _int(s.get("placeId")) if isinstance(s, dict) else None, _int(s.get("qty"), 0) if isinstance(s, dict) else 0
+            if pid in place_ids and q and q > 0:
+                have[pid] = (have.get(pid, (0, ""))[0] + q, txt(s.get("note"), 300))
+        for pid, (q, note) in have.items():
+            stock_rows.append((wid, pid, q, note))
+        stocked[wid] = sum(q for q, _ in have.values())
+        if w.get("pictureData"):
+            try:
+                data = base64.b64decode(str(w["pictureData"]), validate=True)
+            except (ValueError, TypeError):
+                data = b""
+            mime = str(w.get("pictureMime") or "")
+            if data and len(data) <= IMG_MAX and mime in ("image/jpeg", "image/png", "image/webp", "image/gif"):
+                src = w.get("picture") if w.get("picture") in ("upload", "web") else "upload"
+                image_rows.append((wid, data, mime, src, txt(w.get("pictureUrl"), 500) or None, txt(w.get("pictureCredit"), 300) or None, stamp))
+    checkin_rows = []
+    for c in _rows(doc, "checkins"):
+        cid, delta = _int(c.get("id")), _int(c.get("delta"))
+        if not cid or cid <= 0 or delta is None or not txt(c.get("kind"), 20):
+            skipped += 1
+            continue
+        wid = _int(c.get("wine_id"))
+        r = num(c.get("rating"), None)
+        checkin_rows.append((cid, wid if wid in wine_ids else None, txt(c.get("label"), 300), txt(c.get("kind"), 20), delta, r, txt(c.get("note"), 2000),
+                             txt(c.get("ts"), 40) or iso(stamp)))
+    tag_rows = []
+    for t in _rows(doc, "tags"):
+        tid, wid = _int(t.get("id")), _int(t.get("wineId"))
+        if not tid or tid <= 0 or wid not in wine_ids or t.get("kind") not in TAG_KINDS:
+            skipped += 1
+            continue
+        tag_rows.append((tid, wid, t["kind"], txt(t.get("occasion"), 20), txt(t.get("who"), 80), txt(t.get("date"), 10), 1 if t.get("yearly") else 0, txt(t.get("note"), 300), stamp))
+    review_rows = []
+    for v in _rows(doc, "reviews"):
+        rid, wid = _int(v.get("id")), _int(v.get("wineId"))
+        if not rid or rid <= 0 or wid not in wine_ids or v.get("kind") not in REVIEW_KINDS:
+            skipped += 1
+            continue
+        scale = _int(v.get("scale"), 100)
+        review_rows.append((rid, wid, v["kind"], txt(v.get("source"), 80), num(v.get("score"), None), scale if scale in (5, 10, 20, 100) else 100,
+                            txt(v.get("text"), 2000), txt(v.get("url"), 300), txt(v.get("date"), 10), stamp))
+    settings = _restored_settings(doc.get("settings"))
+    with db.lock:
+        if db.conn is None:
+            db.conn = db._connect()
+        cur = db.conn.cursor()
+
+        def put(sql, rows):
+            for row in rows:
+                cur.execute(db._sql(sql), db._args(row))
+        try:
+            for t in ("wc_stock", "wc_tags", "wc_reviews", "wc_checkins", "wc_images", "wc_prices", "wc_price_log", "wc_places", "wc_wines"):
+                cur.execute("DELETE FROM " + t)
+            put("INSERT INTO wc_places (id, name, kind, pos, temp_entity, hum_entity) VALUES (?, ?, ?, ?, ?, ?)", place_rows)
+            put("INSERT INTO wc_wines (id, iwine, color, type, vintage, producer, wine, varietal, designation, vineyard, country, region, subregion, appellation, size, "
+                "currency, value, price, quantity, begin_consume, end_consume, like_percent, like_votes, location, notes, ean, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", wine_rows)
+            put("INSERT INTO wc_stock (wine_id, place_id, qty, note) VALUES (?, ?, ?, ?)", stock_rows)
+            put("INSERT INTO wc_images (wine_id, data, mime, source, source_url, credit, checked_at) VALUES (?, ?, ?, ?, ?, ?, ?)", image_rows)
+            put("INSERT INTO wc_checkins (id, wine_id, label, kind, delta, rating, note, ts) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", checkin_rows)
+            put("INSERT INTO wc_tags (id, wine_id, kind, occasion, who, date, yearly, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", tag_rows)
+            put("INSERT INTO wc_reviews (id, wine_id, kind, source, score, scale, text, url, date, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", review_rows)
+            if DB_TYPE != "sqlite":  # the next new row must not reuse an id that was restored
+                for t in ("wc_wines", "wc_places", "wc_checkins", "wc_tags", "wc_reviews", "wc_stock"):
+                    cur.execute("SELECT setval(pg_get_serial_sequence('%s', 'id'), COALESCE((SELECT MAX(id) FROM %s), 1))" % (t, t))
+            db.conn.commit()
+        except Exception:
+            try:
+                db.conn.rollback()
+            except Exception:
+                db.conn = None
+            raise
+    for key, val in settings.items():
+        meta_set(key, json.dumps(val))
+    for wid, n in stocked.items():
+        if n > next((r[18] for r in wine_rows if r[0] == wid), 0):
+            normalize_stock(wid)
+    _climate_cache.update(t=0, v=None)
+    _place_cache.clear()
+    _alerted.clear()
+    with _sensors_lock:
+        _sensors["hash"] = ""
+    return {"wines": len(wine_rows), "bottles": sum(r[18] for r in wine_rows), "places": len(place_rows), "checkins": len(checkin_rows),
+            "pictures": len(image_rows), "tags": len(tag_rows), "reviews": len(review_rows), "skipped": skipped, "settings": sorted(settings)}
 
 
 def make_views():
@@ -1544,8 +2067,8 @@ def make_views():
         "wc_v_cellar": (
             "SELECT id, producer, wine, CASE WHEN vintage IS NULL OR vintage = 0 THEN NULL ELSE vintage END AS vintage, color, type, country, region, appellation, varietal, "
             "quantity, price, value, quantity * price AS paid_total, quantity * value AS value_total, begin_consume, end_consume, "
-            "CASE WHEN begin_consume IS NULL AND end_consume IS NULL THEN 'No window' WHEN end_consume < %s THEN 'Past peak' "
-            "WHEN begin_consume > %s THEN 'Hold' ELSE 'Ready' END AS status FROM wc_wines WHERE quantity > 0" % (year, year)),
+            "%s AS status, %s AS drink_status FROM wc_wines WHERE quantity > 0"
+            % (drink.sql_case(year, {"nowin": "No window", "past": "Past peak", "hold": "Hold", "soon": "Ready", "ready": "Ready"}), drink.sql_case(year))),
         "wc_v_by_region": (
             "SELECT COALESCE(NULLIF(country, ''), 'Unknown') AS country, COALESCE(NULLIF(region, ''), 'Unknown') AS region, SUM(quantity) AS bottles, "
             "SUM(quantity * value) AS value_total, SUM(quantity * price) AS paid_total FROM wc_wines WHERE quantity > 0 GROUP BY 1, 2"),
@@ -2226,7 +2749,7 @@ def read_label(blob):
 
 # ---------------------------------------------------------------- http
 class Handler(BaseHTTPRequestHandler):
-    server_version = "WineCellar/0.4"
+    server_version = "WineCellar/" + VERSION
 
     def log_message(self, fmt, *args):  # keep logs quiet, no request bodies
         pass
@@ -2391,7 +2914,33 @@ class Handler(BaseHTTPRequestHandler):
         if parts == ["export.csv"] and method == "GET":
             return self._send(200, export_csv(), "text/csv; charset=utf-8", filename="wine-cellar-%s.csv" % now().strftime("%Y-%m-%d"))
         if parts == ["backup.json"] and method == "GET":
-            return self._send(200, export_json(), "application/json; charset=utf-8", filename="wine-cellar-backup-%s.json" % now().strftime("%Y-%m-%d"))
+            return self._send(200, export_json(q.get("pictures", ["1"])[0] != "0"), "application/json; charset=utf-8",
+                              filename="wine-cellar-backup-%s.json" % now().strftime("%Y-%m-%d"))
+        if parts == ["restore"] and method == "POST":
+            return self._send(200, restore_backup(self._body(64 * 1024 * 1024), q.get("confirm", [""])[0]))
+        if parts == ["alerts", "drink"]:
+            if method == "GET":
+                return self._send(200, drink_alert_state())
+            if method in ("PUT", "POST"):
+                return self._send(200, save_alert_settings(self._json()))
+        if parts == ["alerts", "drink", "send"] and method == "POST":
+            try:
+                return self._send(200, send_drink_alert(test=True))
+            except Exception:
+                raise ApiError(502, "Home Assistant did not accept the message. Check the notification service name.")
+        if parts == ["ha", "sensors"]:
+            if method == "GET":
+                return self._send(200, ha_sensors_state())
+            if method in ("PUT", "POST"):
+                return self._send(200, save_ha_sensors(self._json()))
+        if parts == ["ha", "sensors", "publish"] and method == "POST":
+            if not sensors_enabled():
+                raise ApiError(409, "Switch the sensors on first")
+            try:
+                ha_sensors_publish(force=True)
+            except mqtt.MqttError as e:
+                raise ApiError(502, str(e))
+            return self._send(200, ha_sensors_state())
         if parts == ["images", "import"] and method == "POST":
             return self._send(200, import_pictures(self._body(64 * 1024 * 1024)))
         if parts == ["import"] and method == "POST":
@@ -2448,7 +2997,9 @@ def main():
     threading.Thread(target=image_worker, daemon=True).start()
     threading.Thread(target=price_worker, daemon=True).start()
     threading.Thread(target=climate_worker, daemon=True).start()
-    srv = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
+    threading.Thread(target=drink_alert_worker, daemon=True).start()
+    threading.Thread(target=ha_sensors_worker, daemon=True).start()
+    srv =ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
     log("Wine Cellar listening on port %d (%s)" % (PORT, DB_TYPE))
     srv.serve_forever()
 

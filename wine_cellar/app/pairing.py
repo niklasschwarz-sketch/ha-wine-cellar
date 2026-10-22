@@ -16,6 +16,8 @@ import re
 import unicodedata
 from datetime import datetime
 
+import drink
+
 BODY = ["very light", "light", "medium", "full", "very full"]
 
 
@@ -441,17 +443,7 @@ def search_dishes(q):
 
 
 def drink_status(w, year=None):
-    year = year or datetime.now().year
-    b, e = w.get("begin_consume"), w.get("end_consume")
-    if not b and not e:
-        return "nowin"
-    if e and e < year:
-        return "past"
-    if b and b > year:
-        return "hold"
-    if e and e == year:
-        return "soon"
-    return "ready"
+    return drink.status(w.get("begin_consume"), w.get("end_consume"), year)
 
 
 WINDOW_BONUS = {"past": 6, "soon": 8, "ready": 4, "nowin": 0, "hold": -12}

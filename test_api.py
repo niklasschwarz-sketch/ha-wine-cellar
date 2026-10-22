@@ -29,7 +29,8 @@ MOCK_PORT = PORT + 1
 ENV = dict(os.environ, DB_TYPE="sqlite", SQLITE_PATH=DB, PORT=str(PORT), AUTO_IMAGES="0", AUTO_PRICES="0",
            HA_API="http://127.0.0.1:%d/api" % MOCK_PORT, SUPERVISOR_TOKEN="test-token", CLIMATE_CHECK_SECS="1", CLIMATE_RENOTIFY_SECS="3600",
            CLIMATE_TEMP_ENTITY="sensor.cellar_temp", CLIMATE_HUMIDITY_ENTITY="sensor.cellar_humidity", HUMIDITY_MIN="60", HUMIDITY_MAX="75",
-           LABEL_AI_KEY="test-gemini-key", LABEL_AI_MODEL="gemini-retired", LABEL_AI_BASE="http://127.0.0.1:%d" % (MOCK_PORT + 1))
+           LABEL_AI_KEY="test-gemini-key", LABEL_AI_MODEL="gemini-retired", LABEL_AI_BASE="http://127.0.0.1:%d" % (MOCK_PORT + 1),
+           MQTT_HOST="127.0.0.1", MQTT_PORT=str(PORT + 3), HA_SENSORS_SECS="3600", DRINK_ALERT_CHECK_SECS="3600")
 
 # A tiny stand-in for the Home Assistant API: two sensors, one fine and one too dry.
 import http.server
@@ -140,6 +141,65 @@ class MockGemini(http.server.BaseHTTPRequestHandler):
 
 gemini = http.server.ThreadingHTTPServer(("127.0.0.1", MOCK_PORT + 1), MockGemini)
 threading.Thread(target=gemini.serve_forever, daemon=True).start()
+
+# A stand-in for an MQTT broker: records every PUBLISH it is sent (topic, payload, retain).
+import socket
+MQTT_SEEN = []
+MQTT_BAD_AUTH = [False]
+
+
+def _mqtt_client(conn):
+    def rd(n):
+        b = b""
+        while len(b) < n:
+            c = conn.recv(n - len(b))
+            if not c:
+                raise EOFError
+            b += c
+        return b
+    try:
+        while True:
+            first = rd(1)[0]
+            mult, length = 1, 0
+            while True:
+                d = rd(1)[0]
+                length += (d & 127) * mult
+                mult *= 128
+                if not d & 128:
+                    break
+            body = rd(length) if length else b""
+            kind = first >> 4
+            if kind == 1:
+                conn.sendall(b"\x20\x02\x00" + (b"\x04" if MQTT_BAD_AUTH[0] else b"\x00"))
+            elif kind == 3:
+                tl = int.from_bytes(body[:2], "big")
+                MQTT_SEEN.append((body[2:2 + tl].decode(), body[2 + tl:].decode(), bool(first & 1)))
+            elif kind == 12:
+                conn.sendall(b"\xd0\x00")
+            elif kind == 14:
+                return
+    except (EOFError, OSError):
+        pass
+    finally:
+        conn.close()
+
+
+mqtt_srv = socket.socket()
+mqtt_srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+mqtt_srv.bind(("127.0.0.1", PORT + 3))
+mqtt_srv.listen(5)
+
+
+def _mqtt_accept():
+    while True:
+        try:
+            c, _ = mqtt_srv.accept()
+        except OSError:
+            return
+        threading.Thread(target=_mqtt_client, args=(c,), daemon=True).start()
+
+
+threading.Thread(target=_mqtt_accept, daemon=True).start()
 
 fails = []
 proc = None
@@ -574,6 +634,85 @@ try:
     check("an unreadable answer is a clean error", s == 502 and "understood" in d["error"], (s, d))
     check("label reading adds nothing to the cellar", len(wines()) == n_before and call("GET", "/api/label")[0] == 404)
 
+    # ---- one drink-window rule, shared by list, alerts and sensors
+    from datetime import datetime as _dt
+    Y = _dt.now().year
+    mk = lambda name, b, e, q=2: call("POST", "/api/wines", {"producer": name, "wine": "W", "vintage": 2015, "color": "Red", "quantity": q, "value": 10, "begin": b, "end": e})[1]
+    wr, wsoon, wpast, whold, wnone = mk("Rdy", Y - 2, Y + 5, 4), mk("Soon", Y - 3, Y, 2), mk("Past", Y - 9, Y - 1, 1), mk("Hold", Y + 2, Y + 8, 3), mk("None", None, None, 5)
+    st = {w["producer"]: w.get("status") for w in wines()}
+    check("the list carries the one status rule", st.get("Rdy") == "ready" and st.get("Soon") == "soon" and st.get("Past") == "past" and st.get("Hold") == "hold" and st.get("None") == "nowin", st)
+
+    # ---- drink alerts
+    s, a = call("GET", "/api/alerts/drink")
+    check("alerts start switched off", s == 200 and a["enabled"] is False and a["weekday"] == 4 and a["hour"] == 16, a)
+    check("alert counts use the same rule", a["soonBottles"] == 2 and a["pastBottles"] == 1, a)
+    check("the preview names the wines", "Soon" in a["preview"] and "Past" in a["preview"], a["preview"])
+    s, e = call("PUT", "/api/alerts/drink", {"weekday": 9})
+    check("a bad weekday is refused", s == 400, (s, e))
+    s, e = call("PUT", "/api/alerts/drink", {"notifyService": "not a service"})
+    check("a bad service name is refused", s == 400, (s, e))
+    s, a = call("PUT", "/api/alerts/drink", {"enabled": True, "weekday": 2, "hour": 7, "notifyService": "notify.mobile_app_phone"})
+    check("alert settings are saved", s == 200 and a["enabled"] and a["weekday"] == 2 and a["hour"] == 7 and a["notifyService"] == "notify.mobile_app_phone", a)
+    n0 = len(POSTED)
+    s, d = call("POST", "/api/alerts/drink/send")
+    sent = POSTED[n0:]
+    check("a test message goes to the chosen notify service", s == 200 and d["sent"] and sent and sent[0][0] == "/api/services/notify/mobile_app_phone" and "Soon" in sent[0][1]["message"], (s, sent))
+
+    # ---- sensors for Home Assistant over MQTT
+    s, d = call("GET", "/api/ha/sensors")
+    check("sensors start switched off", s == 200 and d["enabled"] is False and d["broker"] is True and d["values"]["bottles"] == sum(w["quantity"] for w in wines()), d)
+    check("nothing is published before it is switched on", MQTT_SEEN == [], MQTT_SEEN)
+    MQTT_BAD_AUTH[0] = True
+    s, d = call("PUT", "/api/ha/sensors", {"enabled": True})
+    check("a broker that refuses us gives a clear error and stays off", s == 502 and "refused" in d["error"] and call("GET", "/api/ha/sensors")[1]["enabled"] is False, (s, d))
+    MQTT_BAD_AUTH[0] = False
+    del MQTT_SEEN[:]
+    s, d = call("PUT", "/api/ha/sensors", {"enabled": True})
+    topics = {t: (p, r) for t, p, r in MQTT_SEEN}
+    check("switching on announces seven retained sensors", s == 200 and d["enabled"] and sum(1 for t in topics if t.startswith("homeassistant/sensor/wine_cellar/")) == 7
+          and all(topics[t][1] for t in topics), (s, sorted(topics)))
+    cfgd = json.loads(topics["homeassistant/sensor/wine_cellar/ready/config"][0])
+    check("a sensor config is complete", cfgd["unique_id"] == "wine_cellar_ready" and cfgd["state_topic"] == "wine_cellar/state" and cfgd["device"]["identifiers"] == ["wine_cellar"], cfgd)
+    state = json.loads(topics["wine_cellar/state"][0])
+    check("the state matches the cellar", state["bottles"] == sum(w["quantity"] for w in wines()) and state["ready"] == 6 and state["drink_soon"] == 2 and state["past_peak"] == 1 and state["hold"] == 3, state)
+    check("lists of wines are attached to the sensors", "Soon" in topics["wine_cellar/list/drink_soon"][0] and "Past" in topics["wine_cellar/list/past_peak"][0], topics.get("wine_cellar/list/drink_soon"))
+    n1 = len(MQTT_SEEN)
+    s, d = call("POST", "/api/ha/sensors/publish")
+    check("a manual publish sends everything again", s == 200 and len(MQTT_SEEN) > n1, (s, len(MQTT_SEEN), n1))
+    del MQTT_SEEN[:]
+    s, d = call("PUT", "/api/ha/sensors", {"enabled": False})
+    check("switching off removes the sensors with empty retained messages", s == 200 and not d["enabled"] and len(MQTT_SEEN) >= 7 and all(p == "" and r for _, p, r in MQTT_SEEN), MQTT_SEEN[:3])
+    s, e = call("POST", "/api/ha/sensors/publish")
+    check("publishing while off is refused", s == 409, (s, e))
+
+    # ---- full copy, with pictures, and restore
+    bk = call("GET", "/api/backup.json")[1]
+    check("the full copy carries version, settings and drink alert settings", bk["version"] == "0.16.0" and bk["picturesIncluded"] is True and bk["settings"]["alerts"]["weekday"] == 2, (bk.get("version"), bk.get("settings")))
+    withpic = [w for w in bk["wines"] if w.get("pictureData")]
+    check("pictures travel inside the full copy", len(withpic) >= 1 and withpic[0].get("pictureMime"), len(withpic))
+    small = call("GET", "/api/backup.json?pictures=0")[1]
+    check("a copy without pictures says so", small["picturesIncluded"] is False and not any(w.get("pictureData") for w in small["wines"]))
+    raw = json.dumps(bk).encode()
+    s, e = call("POST", "/api/restore", raw=raw)
+    check("restore needs confirmation", s == 400, (s, e))
+    s, e = call("POST", "/api/restore?confirm=replace", raw=b"not json")
+    check("restore refuses a file that is not a copy", s == 400, (s, e))
+    s, e = call("POST", "/api/restore?confirm=replace", raw=json.dumps({"app": "other", "wines": []}).encode())
+    check("restore refuses another app's file", s == 400, (s, e))
+    before = {w["id"]: (w["producer"], w["quantity"], w.get("img") is not None) for w in wines()}
+    for _w in wines():
+        call("DELETE", "/api/wines/%d" % _w["id"])
+    check("the cellar is empty before restoring", wines() == [])
+    s, r = call("POST", "/api/restore?confirm=replace", raw=raw)
+    after = {w["id"]: (w["producer"], w["quantity"], w.get("img") is not None) for w in wines()}
+    check("restore brings back wines, ids, pictures and settings", s == 200 and r["wines"] == len(before) and after == before and r["pictures"] == len(withpic)
+          and call("GET", "/api/alerts/drink")[1]["weekday"] == 2, (s, r))
+    s, r = call("POST", "/api/restore?confirm=replace", raw=json.dumps({"app": "wine-cellar", "wines": [{"id": 1, "producer": "Only"}, {"id": 1, "producer": "Dup"}, {"id": -3, "producer": "Bad"}]}).encode())
+    check("restore skips bad and duplicate entries", s == 200 and r["wines"] == 1 and r["skipped"] == 2 and [w["producer"] for w in wines()] == ["Only"], (s, r))
+    s, w = call("POST", "/api/wines", {"producer": "Next", "wine": "x"})
+    check("new wines after a restore get a fresh id", s == 201 and w["id"] > 1, w)
+    check("the version is in step with config.yaml", 'version: "%s"' % bk["version"] in open(os.path.join(HERE, "wine_cellar", "config.yaml")).read(), bk["version"])
+
     # ---- page and unknown paths
     with urllib.request.urlopen(BASE + "/", timeout=5) as r:
         html = r.read().decode()
@@ -583,6 +722,7 @@ finally:
     stop()
     mock.shutdown()
     gemini.shutdown()
+    mqtt_srv.close()
 
 print()
 if fails:

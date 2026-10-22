@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.16.0
+- **Weekly drink reminder:** *More, Alerts and sensors*. Pick a day and hour and Wine Cellar sends one message a week through Home Assistant (a phone notification, or a message inside Home Assistant) listing the bottles in the last year of their window and those already past it. Nothing is sent in a week when nothing needs attention. There is a **Send a test message** button.
+- **Cellar sensors in Home Assistant:** switch on *Show the cellar as sensors* and a Wine Cellar device appears with bottles, wines, ready to drink, drink this year, past peak, hold and estimated value (`sensor.wine_cellar_*`), for dashboards and automations. The names of the wines to drink soon or past peak are attached to those sensors. It needs the Mosquitto broker add-on and the MQTT integration; Wine Cellar finds the broker by itself. Switching it off removes the sensors again. After updating, restart the add-on once so Home Assistant can offer it the MQTT connection.
+- **Restore from a full copy:** *Import and export, Restore from a full copy*. The full copy now includes your pictures and settings, and there is a smaller copy without pictures. Restoring replaces everything and asks first.
+- **One rule for "ready to drink":** the wine list, the weekly reminder, the sensors and the database views for Grafana all use the same rule now, so they can no longer disagree. Database view `wc_v_cellar` has a new column `drink_status`.
+- Hardening: the time of the weekly reminder follows the Home Assistant time zone.
+
 ## 0.15.1
 - **Fix: Gemini label reading failed with "HTTP 404".** Google had retired the model the add-on asked for (gemini-2.5-flash is no longer offered to new keys). The add-on now picks the model itself: it asks Google which Flash models your key can use, takes the newest, and switches again when Google retires one. Leave the *Gemini model* option empty; if it still says gemini-2.5-flash from 0.15.0, the add-on finds a working model anyway.
 - Clearer messages when Gemini says no, and the on-device fallback is labelled as such.

@@ -1,6 +1,6 @@
 ARG BUILD_FROM
 FROM $BUILD_FROM
-RUN apk add --no-cache python3 py3-pip ca-certificates \
+RUN apk add --no-cache python3 py3-pip ca-certificates tzdata \
  && pip install --no-cache-dir --break-system-packages pg8000==1.31.2 \
  && python3 -c "import sqlite3, pg8000"
 COPY app /app

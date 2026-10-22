@@ -138,6 +138,8 @@ dialog::backdrop{background:rgba(0,0,0,.4);backdrop-filter:blur(4px)}
 .rv:first-child{border-top:0}
 .score{display:inline-block;min-width:2.4rem;text-align:center;padding:1px 8px;border-radius:8px;background:var(--fill);font-variant-numeric:tabular-nums;font-weight:600}
 .form2{display:grid;gap:8px;grid-template-columns:1fr 1fr}
+.chk{display:flex;gap:10px;align-items:center;min-height:44px}
+.f>.row{display:flex;gap:8px;flex-wrap:wrap}
 .form2 .wide{grid-column:1/-1}
 .lbls{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
 .lbl{border:1px dashed #999;padding:6px;text-align:center;font-size:11px;line-height:1.2;background:#fff;color:#000;break-inside:avoid;overflow:hidden}
@@ -487,6 +489,7 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
       <button id="pairBtn" role="menuitem" type="button" title="Pick a dish and see which of your bottles go with it">Dinner pairing</button>
       <button id="settingsBtn" role="menuitem" type="button" title="Country, currency, temperature unit, number and date format, paper size">Settings</button>
       <button id="climateBtn" role="menuitem" type="button" title="Choose the cellar temperature and humidity sensors and the alarm limits">Cellar climate</button>
+      <button id="alertsBtn" role="menuitem" type="button" title="A weekly message about bottles to drink, and sensors for Home Assistant">Alerts and sensors</button>
       <button id="labelBtn" role="menuitem" type="button" title="Print barcode labels for your bottles">Bottle labels</button>
       <button id="statsBtn" role="menuitem" type="button" title="Charts and numbers for the whole cellar">Stats</button>
       <button id="importBtn" role="menuitem" type="button" title="Export your cellar, or import a CSV">Import / export</button>
@@ -627,7 +630,8 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
     var type = w.type || w.color;
     var style = /Sparkling/.test(type) ? 'Sparkling' : /Sweet/.test(type) ? 'Sweet' : /Off-dry/.test(type) ? 'Off-dry' : 'Dry';
     var b = w.begin || null, e = w.end || null, status = 'nowin';
-    if (b || e) status = (e && e < YEAR) ? 'past' : ((b && b > YEAR) ? 'hold' : 'ready');
+    if (w.status) status = w.status === 'soon' ? 'ready' : (STATUS[w.status] ? w.status : 'nowin'); /* the server decides; its last-year "soon" shows as ready here */
+    else if (b || e) status = (e && e < YEAR) ? 'past' : ((b && b > YEAR) ? 'hold' : 'ready');
     var name = String(w.wine || '').trim();
     if (name.indexOf(w.producer) === 0) name = name.slice(w.producer.length).trim();
     var r = {
@@ -2121,6 +2125,7 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
   $('statsBtn').addEventListener('click', openStats);
   $('labelBtn').addEventListener('click', function () { openLabelSheet(); });
   $('climateBtn').addEventListener('click', function () { openClimateSettings(); });
+  $('alertsBtn').addEventListener('click', function () { openAlertsSheet(); });
   $('settingsBtn').addEventListener('click', function () { openSettings(); });
   $('pairBtn').addEventListener('click', function () { openPairSheet(); });
   $('tableBtn').addEventListener('click', openTable);
@@ -2258,6 +2263,54 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
       [h('button', { type: 'button', 'class': 'btn', text: 'Cancel', onclick: function () { openPlaceForm(p); } }), go]);
   }
 
+  /* ---------- drink alerts and Home Assistant sensors ---------- */
+  function openAlertsSheet() {
+    var DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    var msg = h('div', { 'class': 'err' }), note = h('div', { 'class': 'note' });
+    var body = h('div', { 'class': 'f', style: 'gap:18px' }, h('p', { 'class': 'note', text: 'Loading…' }));
+    var foot = [h('button', { type: 'button', 'class': 'btn', text: 'Close', onclick: function () { dlg.close(); } })];
+    openSheet('Alerts and sensors', body, foot);
+    Promise.all([api('GET', 'api/alerts/drink'), api('GET', 'api/ha/sensors')]).then(function (res) {
+      var a = res[0], s = res[1];
+      var on = h('input', { type: 'checkbox', id: 'alOn' }); on.checked = !!a.enabled;
+      var day = h('select', { 'class': 'in', 'aria-label': 'Day of the week' }, DAYS.map(function (d, i) { return h('option', { value: String(i), text: d }); })); day.value = String(a.weekday);
+      var hour = h('select', { 'class': 'in', 'aria-label': 'Hour' }, Array.from({ length: 24 }, function (_, i) { return h('option', { value: String(i), text: (i < 10 ? '0' : '') + i + ':00' }); })); hour.value = String(a.hour);
+      var svc = h('input', { 'class': 'in', placeholder: 'notify.mobile_app_my_phone (empty = a message inside Home Assistant)', 'aria-label': 'Notification service', value: a.notifyService || '', maxlength: 80 });
+      var collect = function () { return { enabled: on.checked, weekday: +day.value, hour: +hour.value, notifyService: svc.value.trim() }; };
+      var save = h('button', { type: 'button', 'class': 'btn primary', text: 'Save alerts', onclick: function () {
+        msg.textContent = ''; save.disabled = true;
+        api('PUT', 'api/alerts/drink', collect()).then(function () { toast('Alerts saved'); }).catch(function (e) { msg.textContent = e.message; }).then(function () { save.disabled = false; });
+      } });
+      var test = h('button', { type: 'button', 'class': 'btn', text: 'Send a test message', onclick: function () {
+        msg.textContent = ''; test.disabled = true;
+        api('PUT', 'api/alerts/drink', collect()).then(function () { return api('POST', 'api/alerts/drink/send'); })
+          .then(function () { note.textContent = 'Test message sent. Look for it in Home Assistant.'; }).catch(function (e) { msg.textContent = e.message; }).then(function () { test.disabled = false; });
+      } });
+      var counts = (a.soonBottles || a.pastBottles) ? fmtN(a.soonBottles) + ' bottles are in the last year of their window and ' + fmtN(a.pastBottles) + ' are past it right now.' : 'No bottle needs attention right now, so nothing would be sent.';
+      var alerts = h('div', { 'class': 'f' }, h('div', { 'class': 'lab', text: 'Weekly drink reminder' }),
+        h('label', { 'class': 'chk' }, on, ' Send a message once a week'),
+        h('div', { 'class': 'form2' }, day, hour), svc,
+        h('p', { 'class': 'note', text: counts + ' A message is only sent when there is something to drink soon or past its window.' }),
+        h('div', { 'class': 'row' }, save, test));
+      var son = h('input', { type: 'checkbox', id: 'snOn' }); son.checked = !!s.enabled;
+      var vals = h('p', { 'class': 'note' });
+      var paint = function (st) {
+        vals.textContent = (st.enabled ? 'Sensors are on. ' : '') + 'Now: ' + fmtN(st.values.bottles) + ' bottles, ' + fmtN(st.values.ready) + ' ready, ' + fmtN(st.values.drink_soon) + ' to drink this year, ' + fmtN(st.values.past_peak) + ' past peak.'
+          + (st.last ? ' Last sent ' + new Date(st.last).toLocaleString() + '.' : '') + (st.error ? ' Last problem: ' + st.error : '');
+      };
+      paint(s);
+      var apply = h('button', { type: 'button', 'class': 'btn primary', text: 'Save sensors', onclick: function () {
+        msg.textContent = ''; apply.disabled = true;
+        api('PUT', 'api/ha/sensors', { enabled: son.checked }).then(function (st) { paint(st); toast(st.warning || (st.enabled ? 'Sensors are on' : 'Sensors are off')); }).catch(function (e) { msg.textContent = e.message; son.checked = !!s.enabled; }).then(function () { apply.disabled = false; });
+      } });
+      var sens = h('div', { 'class': 'f' }, h('div', { 'class': 'lab', text: 'Sensors in Home Assistant' }),
+        h('label', { 'class': 'chk' }, son, ' Show the cellar as sensors'),
+        h('p', { 'class': 'note', text: 'Adds a Wine Cellar device with bottles, ready, drink this year, past peak, hold and value, for dashboards and automations. Needs the Mosquitto broker and the MQTT integration.' + (s.broker ? '' : ' No broker was found yet.') }),
+        vals, h('div', { 'class': 'row' }, apply));
+      body.replaceChildren(alerts, sens, msg, note);
+    }).catch(function (e) { body.replaceChildren(h('p', { 'class': 'err', text: e.message })); });
+  }
+
   /* ---------- export, import ---------- */
   function openDataSheet() {
     var dlLink = function (cls, href, label) { return h('a', { 'class': 'btn ' + cls, href: base + href, download: '', text: label }); };
@@ -2266,7 +2319,22 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
         dlLink('primary', 'api/export.csv', 'Download CSV (all wines)'),
         h('p', { 'class': 'note', text: 'Opens in Excel, Numbers and Google Sheets. It uses the CellarTracker column names, so you can import it again here, or into CellarTracker. A wine kept in several places gets one row per place (Location and Bin).' }),
         dlLink('', 'api/backup.json', 'Download full copy (JSON)'),
-        h('p', { 'class': 'note', text: 'Wines, the whole history and your storage places in one file, for safekeeping. For a complete backup, include Wine Cellar in your Home Assistant backups.' })),
+        dlLink('', 'api/backup.json?pictures=0', 'Download full copy without pictures (smaller)'),
+        h('p', { 'class': 'note', text: 'Wines, pictures, the whole history, storage places and settings in one file, for safekeeping. For a complete backup, include Wine Cellar in your Home Assistant backups.' })),
+      h('div', { 'class': 'f' }, h('div', { 'class': 'lab', text: 'Restore' }),
+        h('button', { type: 'button', 'class': 'btn', text: 'Restore from a full copy…', onclick: function () {
+          var inp = h('input', { type: 'file', accept: '.json,application/json', hidden: true });
+          inp.addEventListener('change', function () {
+            var f = inp.files && inp.files[0]; if (!f) return;
+            if (!window.confirm('Restore from ' + f.name + '?\n\nThis replaces EVERYTHING in the cellar: wines, bottles, history, places and settings. If the file has no pictures, the current pictures are removed too.\n\nDownload a full copy first if you are unsure.')) return;
+            toast('Restoring ' + f.name + '…');
+            f.arrayBuffer().then(function (buf) { return api('POST', 'api/restore?confirm=replace', null, buf, 'application/json'); })
+              .then(function (res) { return load().then(function () { toast('Restored ' + res.wines + ' wines, ' + res.bottles + ' bottles' + (res.pictures ? ', ' + res.pictures + ' pictures' : '') + (res.skipped ? ', ' + res.skipped + ' entries skipped' : '')); }); })
+              .catch(function (e) { toast(e.message); });
+          });
+          dlg.close(); document.body.appendChild(inp); inp.click();
+        } }),
+        h('p', { 'class': 'note', text: 'Only for a full copy made by this app. It replaces everything that is here now.' })),
       h('div', { 'class': 'f' }, h('div', { 'class': 'lab', text: 'Import' }),
         h('button', { type: 'button', 'class': 'btn', text: 'Import a CSV file…', onclick: function () { dlg.close(); $('file').click(); } }),
         h('p', { 'class': 'note', text: 'A CellarTracker export, or a file from the export above. Wines already here are updated, new ones are added. Nothing is deleted.' }),
