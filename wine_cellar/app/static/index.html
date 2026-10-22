@@ -630,6 +630,7 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
   var pct0 = function (x) { return Math.round(x * 100) + '%'; };
   var cfg = { eurSek: 11, labelAi: false, autoPrices: false, sbProducts: 0, sbUpdated: null, settings: { country: '', currency: 'EUR', tempUnit: 'C', formats: 'auto', paper: 'A4', sekRate: 11 }, settingsSaved: false };
   var COUNTRY_LIST = null;
+  var I18N = { code: 'en', dict: null, list: [] };
   function browserLocale() { try { return (navigator.languages && navigator.languages[0]) || navigator.language || 'en'; } catch (e) { return 'en'; } }
   function applyLocale() {
     var st = cfg.settings || {}, loc = browserLocale();
@@ -3045,7 +3046,6 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
      Text is translated where it is shown: the English words are the keys of a language file
      (lang/<code>.json), numbers inside a line are written {0}, {1}. Anything without an entry stays English.
      To add a language see lang/README.md. */
-  var I18N = { code: 'en', dict: null, list: [] };
   var NUMRE = /\d+(?:[.,]\d+)*/g;
   function tr(s) {
     var d = I18N.dict; if (!d || !s) return s;

@@ -112,19 +112,33 @@ def run():
                                 pg.click("#" + bid, timeout=1000)
                             except Exception:
                                 break
-                # a wine card, its sheet and the bottle actions
-                pg.goto(url); pg.wait_for_selector(".card", timeout=10000)
-                pg.click(".card")
+                if vp["width"] < 700:
+                    pg.close()
+                    continue
+                # a wine's page and every button on it, one by one (reopened each time)
+                def open_info():
+                    pg.goto(url); pg.wait_for_selector(".wname", timeout=10000)
+                    pg.click(".wname >> nth=0")
+                    pg.wait_for_selector("dialog[open]", timeout=3000)
+                open_info()
                 snap(pg, found)
-                for entry in pg.evaluate("Array.from(document.querySelectorAll('dialog[open] button, dialog[open] summary')).map(function(e,i){return (e.textContent||'').trim()+'|'+i})")[:60]:
-                    label, idx = entry.rsplit("|", 1)
+                n = pg.evaluate("document.querySelectorAll('dialog[open] button, dialog[open] summary').length")
+                for i in range(min(n, 60)):
+                    open_info()
+                    label = pg.evaluate("(i)=>{var e=document.querySelectorAll('dialog[open] button, dialog[open] summary')[i]; return e ? (e.textContent||'').trim() : ''}", i)
                     if not label or label.lower() in ("close", "done", "cancel") or any(x in label.lower() for x in SKIP):
                         continue
-                    try:
-                        pg.evaluate("(i)=>{var e=document.querySelectorAll('dialog[open] button, dialog[open] summary')[i]; if(e) e.click();}", int(idx))
-                    except Exception:
-                        pass
+                    pg.evaluate("(i)=>{var e=document.querySelectorAll('dialog[open] button, dialog[open] summary')[i]; if(e) e.click();}", i)
                     snap(pg, found)
+                    # one level further: buttons of whatever opened on top
+                    top = pg.evaluate("document.querySelectorAll('dialog[open]').length")
+                    for entry in pg.evaluate("Array.from(document.querySelectorAll('dialog[open]:last-of-type button')).map(function(e,i){return (e.textContent||'').trim()+'|'+i})")[:12]:
+                        lab2, idx2 = entry.rsplit("|", 1)
+                        if not lab2 or lab2.lower() in ("close", "done", "cancel") or any(x in lab2.lower() for x in SKIP):
+                            continue
+                        pg.evaluate("(i)=>{var e=document.querySelectorAll('dialog[open]:last-of-type button')[i]; if(e) e.click();}", int(idx2))
+                        snap(pg, found)
+                    close_all(pg)
                 pg.close()
             b.close()
     finally:
