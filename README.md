@@ -1,7 +1,7 @@
 # HA Wine Cellar
 Home Assistant add-on: a filterable wine cellar app (add / drink / remove bottles, check-ins, drink-soon, charts) built-in database.
 
-Features: barcode scanning, label photo reading, pictures (paste or drop images), food and wine pairing, cellar temperature and humidity from Home Assistant, gift and occasion tags, printable bottle barcode labels, scores and reviews, printable wine list, edit table, stats, CSV export/import.
+Features: light and dark mode, a menu you arrange yourself, a Drink now list, weekly drink reminders, cellar sensors in Home Assistant (MQTT), full backup and restore, barcode scanning, label photo reading, pictures (paste or drop images), food and wine pairing, cellar temperature and humidity from Home Assistant, gift and occasion tags, printable bottle barcode labels, scores and reviews, printable wine list, edit table, stats, CSV export/import.
 
 ## Install
 [![Add this repository to your Home Assistant](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fniklasschwarz-sketch%2Fha-wine-cellar)
@@ -20,13 +20,15 @@ Home Assistant can only add public repositories. While this repo is private, cop
 
 **Install:** tap the "Add repository" button above (or add the repository by hand), install **Wine Cellar**, start it and turn on "Show in sidebar". Nothing needs configuring. Import a CellarTracker CSV (**More → Import / export**) or add a few wines by hand.
 
-**What to try:** add and drink bottles, scan or type a barcode, paste a picture, open a bottle for "Goes well with", use **More → Dinner pairing**, tag a bottle as a gift with a birthday date, print a label from **More → Bottle labels** and scan it back, and (if you have cellar temperature or humidity sensors) pick them under **More → Cellar climate**.
+**Finding things:** on a phone, extra options are under **More** in the bottom bar; on a wide screen they are listed down the left side. Settings → *Customise the menu* lets you reorder, move or hide them.
 
-**What leaves your home:** only two things, both explained in [`wine_cellar/DOCS.md`](wine_cellar/DOCS.md). The add-on looks up bottle pictures on Open Food Facts (switch off with `auto_images`), and, only if you turn it on, Systembolaget prices. Label photos are read inside your own browser.
+**What to try:** add and drink bottles, scan or type a barcode, paste a picture, open a bottle for "Goes well with", use **More → Dinner pairing**, tag a bottle as a gift with a birthday date, print a label from **More → Bottle labels** and scan it back, turn on the weekly reminder under **More → Alerts and sensors**, and (if you have cellar temperature or humidity sensors) pick them under **More → Cellar climate**.
+
+**What leaves your home:** the add-on looks up bottle pictures on Open Food Facts (switch off with `auto_images`), downloads Systembolaget prices if you turn that on, and, only if you add your own Gemini key, sends each label photo you take to Google to be read. Without a key, label photos are read inside your own browser. Details are in [`wine_cellar/DOCS.md`](wine_cellar/DOCS.md).
 
 **Uninstall cleanly:** Settings → Add-ons → Wine Cellar → Uninstall, and tick the option to delete the add-on's data. That removes the add-on, its image and its database file. It created nothing else in Home Assistant: no helpers, entities or automations, and it changed no settings. Things you may still want to remove by hand: the repository entry (Add-on store → ⋮ → Repositories), the `wine_cellar` folder in `/local_apps` if you installed that way, and any Home Assistant backup you made while it was installed (backups include the add-on's data). 
 
-**Feedback:** tell the developer what you tried, what you expected and what happened, and include the add-on's Log tab text if something failed. Please export a CSV from **Import / export** before an update, to be safe.
+**Feedback:** tell the developer what you tried, what you expected and what happened, and include the add-on's Log tab text if something failed. Please export a CSV from **Import / export** before an update, to be safe. Changes per version are in [`wine_cellar/CHANGELOG.md`](wine_cellar/CHANGELOG.md).
 
 ## Adding pictures in bulk
 **More → Import / export → Import pictures from a zip.** The zip format is described in [`PICTURE_ZIP_FORMAT.md`](PICTURE_ZIP_FORMAT.md), so you can make your own zip from your own photos or any other source you have the right to use. The add-on itself only downloads pictures from Open Food Facts.

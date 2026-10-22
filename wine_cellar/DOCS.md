@@ -8,6 +8,17 @@
 
 That is all. There is nothing to configure: the add-on keeps your cellar in its own database file, so it needs no database server and touches nothing else on your system.
 
+## Getting around
+**Phone:** a bottom bar with three favourites (Cellar, Drink and Stats by default), the **+** button for adding a wine, and **More** for everything else. **Wide screen or wall tablet:** every option is listed down the left side, so there is no More button. Wherever these notes say "More → X", on a wide screen just pick X from the left side.
+
+**Drink now** lists the wines to open: first those past their window, then those at their best this year, then everything else that is ready, each with its bottle count. Tap one to open a bottle and log it.
+
+**Status words.** Every wine has one of four, the same everywhere (cards, wine list, weekly reminder and sensors): *Ready* (inside its drinking window), *Hold* (not yet), *Past peak* (window over) and *No window* (no dates entered). Each has an icon as well as a colour.
+
+**Appearance** (Settings → *On this device*): Light or Dark (default: follow your device) and a text size (Medium, Large, Wall display). **Customise the menu…** (same place) is described under *Customise the menu* below. Both are remembered per browser, so a phone and a wall tablet can differ.
+
+**Cards and filters.** Tap a wine card to open it. On a phone, Filters opens as a bottom sheet with a **Show N wines** button.
+
 ## No warranty
 Wine Cellar is free software under the Apache License 2.0 and is provided "as is", without warranty of any kind. The author is not liable for any loss or damage, including lost data. Keep a Home Assistant backup and export a CSV from **Import / export** now and then. Prices, scores, pairings and drinking windows are suggestions, not advice. The barcode labels and scanner are a convenience and may misread.
 
@@ -68,9 +79,10 @@ On a bottle's page, **Tags and occasions** lets you mark it as a gift you receiv
 ## Scores and reviews
 Each wine page has **Scores and reviews**: add a critic or community score (out of 100, 20, 10 or 5) with the source, date, a few words and a link. The average of your critic scores is shown at the top, with the CellarTracker "members like it" share from your import. CellarTracker, Vivino and the critics do not let other apps read their scores, so you enter the ones you care about; the **CellarTracker** button opens the wine's page there for the community and critic notes.
 
-## Edit table
+## Storage places
 **Storage places.** *More → Settings → Use several storage places* turns on fridges, cellars and a bar. Add them under *More → Storage places* (for example Fridge 1, Fridge 2, Cellar left, Cellar right, Bar, Bar fridge), each with a type and, if you like, its own Home Assistant temperature and humidity sensor. Each bottle is in exactly one place, so a wine with several bottles can be split over places. The first time you switch it on, every shelf text you already have becomes a place holding that wine's bottles. The chips above the list filter by place, a wine's bottle info shows where it is and has **Move…**, and opening a bottle asks which place it comes from when the wine is in more than one. *Shelf notes* adds a short note per place such as "shelf 3". The CSV export has one row per place (columns Location and Bin) and importing it restores them. **Move these…** (next to the place chips) moves the bottles of the wines you are looking at, so filter first: for example all red wines, or everything from one producer, then pick where they are now and where they go. Turning the switch off keeps your places and goes back to the single shelf text.
 
+## Edit table
 **Edit table** opens the whole cellar as a spreadsheet. Type in any cell, or use the + and − next to the bottle count. Enter and the up/down arrows move between rows, Tab moves right and adds a row after the last cell. You can paste rows straight from Excel or Google Sheets (column order: vintage, producer, wine, colour, style, country, region, appellation, grape, bottles, paid, value, drink from, drink to, shelf). Ctrl/Cmd+D copies the cell above.
 Tick rows to add or remove a bottle on all of them, duplicate them, or delete them. Changed cells are highlighted. Nothing is saved until you press Save (or Ctrl/Cmd+S); Discard throws the changes away. Bottle changes show up in the activity list as added or removed.
 
@@ -78,8 +90,17 @@ Tick rows to add or remove a bottle on all of them, duplicate them, or delete th
 **Stats** shows bottles, value or money paid by region, country, vintage, style, grape and producer, when to drink, price bands, biggest gains and losses, and bottles opened per month. It can cover the whole cellar or only your current filters.
 
 ## Export and import
-**Import / export** downloads a CSV (opens in Excel, Numbers, Google Sheets) or a full JSON copy with history and storage places. The CSV uses CellarTracker's column names, so it can be imported again, here or in CellarTracker. Importing again updates wines and adds new ones; it deletes nothing and restores the places from the Location and Bin columns when storage places are on. For a complete backup, include this add-on in your Home Assistant backups. The full copy also holds your pictures and settings; **Restore from a full copy** puts it back and replaces everything in the cellar, so it is meant for a new install or after a mistake.
+**Import / export** downloads a CSV (opens in Excel, Numbers, Google Sheets) or a full JSON copy with history and storage places. The CSV uses CellarTracker's column names, so it can be imported again, here or in CellarTracker. Importing again updates wines and adds new ones; it deletes nothing and restores the places from the Location and Bin columns when storage places are on. For a complete backup, include this add-on in your Home Assistant backups. The full copy also holds your pictures and settings (a smaller copy leaves the pictures out); **Restore from a full copy** puts it back, asks first, and replaces everything in the cellar, so it is meant for a new install or after a mistake.
 
-**Customise the menu** (More, Settings, *On this device*, next to *Appearance*). On a phone the bottom bar holds up to three favourites, the + button and More. *Customise the menu…* lets you drag every option into the order you want and choose for each one whether it sits in the bar (up to three), under More, or is Hidden (Settings can't be hidden); a wide screen such as a wall tablet lists all of them down the left side in that order. The choice is kept per browser.
+## Customise the menu
+Open **Settings → On this device → Customise the menu…**. Drag the handle (or use the arrows) to put the options in your order. Each option has a choice: **In the bar** (up to three on a phone), **In More**, or **Hidden**, which leaves it out of the menu completely. Settings can't be hidden, so you can always get back. A wide screen lists all options that are not hidden down the left side in your order. **Reset to default** restores everything. The choice is kept per browser.
 
-**Alerts and sensors** (More menu). *Weekly drink reminder:* choose a day, an hour and, if you like, a `notify.` service such as `notify.mobile_app_my_phone`; without one the message appears inside Home Assistant. It lists bottles in the last year of their drinking window and bottles past it, and is skipped when there are none. *Sensors in Home Assistant:* publishes bottles, wines, ready, drink this year, past peak, hold and value over MQTT discovery as a Wine Cellar device. Install the Mosquitto broker add-on and the MQTT integration first, and restart Wine Cellar after updating to 0.16.0 so it gets the connection details.
+## Alerts and sensors
+Open **Alerts and sensors** from the menu.
+
+**Weekly drink reminder:** choose a day, an hour and, if you like, a `notify.` service such as `notify.mobile_app_my_phone`; without one the message appears inside Home Assistant. It lists bottles in the last year of their drinking window and bottles past it, and is skipped when there are none. **Send a test message** checks it. The time follows the Home Assistant time zone.
+
+**Sensors in Home Assistant:** *Show the cellar as sensors* publishes bottles, wines, ready, drink this year, past peak, hold and estimated value over MQTT discovery as a Wine Cellar device (`sensor.wine_cellar_*`). The names of the wines to drink soon or past peak are attached to those sensors. Install the Mosquitto broker add-on and the MQTT integration first; the add-on finds the broker by itself, and you restart it once after updating so Home Assistant can offer it the connection. Switching it off removes the sensors. The sensors stay inside your home.
+
+## For Grafana and other tools
+The database file has views for reporting; `wc_v_cellar` includes a `drink_status` column that follows the same rule as the status words above.
