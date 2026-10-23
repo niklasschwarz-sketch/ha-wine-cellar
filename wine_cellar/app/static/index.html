@@ -1828,7 +1828,8 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
     function datalist(id, vals) { var d = h('datalist', { id: 'dl_' + id }); vals.forEach(function (x) { d.appendChild(h('option', { value: x })); }); dls.appendChild(d); }
     datalist('producer', uniq('producer')); datalist('cuvee', []); datalist('country', uniq('country')); datalist('region', uniq('region')); datalist('appellation', uniq('appellation')); datalist('varietal', uniq('varietal'));
     var P = inp('producer', 'Producer *', { value: raw ? raw.producer : (pre.producer || ''), maxlength: 200, required: true }, true);
-    var cuveeStart = edit ? edit.name : (ex ? ex.name : (pre.cuvee || ''));
+    /* use the real name part, not the display fallback (appellation or grape), or it would be saved into the name */
+    var cuveeStart = edit ? wineNameOf(edit.raw) : (ex ? wineNameOf(ex.raw) : (pre.cuvee || ''));
     var W = inp('cuvee', 'Wine / cuvée', { value: cuveeStart, maxlength: 200, placeholder: 'e.g. Les Perrières' }, true);
     var yearIn = h('input', { 'class': 'in', id: 'f_vintage', type: 'number', inputmode: 'numeric', min: 1800, max: 2100, placeholder: 'Year', value: raw && raw.vintage !== 'NV' ? raw.vintage : '' });
     var nv = !!(raw && raw.vintage === 'NV'), nvBtn = h('button', { type: 'button', 'class': 'chip', 'aria-pressed': nv ? 'true' : 'false', text: 'Non-vintage', onclick: function () { nv = !nv; nvBtn.setAttribute('aria-pressed', nv ? 'true' : 'false'); yearIn.disabled = nv; } });
@@ -2021,7 +2022,7 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
       var price = PR[1].value, value = VA[1].value || price;
       var vintageVal = nv ? 'NV' : (yearIn.value || 'NV');
       var data = {
-        producer: prodName, wine: [prodName, app, cuvee].filter(Boolean).join(' '), vintage: vintageVal, color: color, style: style,
+        producer: prodName, wine: joinWine(prodName, app, cuvee), vintage: vintageVal, color: color, style: style,
         country: C[1].value, region: R[1].value, appellation: app, varietal: G[1].value, price: price || 0, value: value || 0,
         begin: B[1].value || null, end: E[1].value || null, location: L[1].value, notes: N.value, ean: EAN[1].value
       };
@@ -2822,6 +2823,16 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
   function plain(n) { return String(Math.round(n * 100) / 100); }
   function parseNum(s) { var t = String(s == null ? '' : s).replace(/[^0-9.,\-]/g, '').replace(',', '.'); if (t === '') return 0; var n = Number(t); return isFinite(n) ? n : NaN; }
   function wineNameOf(w) { var n = String(w.wine || '').trim(); if (w.producer && n.indexOf(w.producer) === 0) n = n.slice(w.producer.length).trim(); return n; }
+  /* The stored wine text is "producer appellation cuvée". Build it without repeating a part that is already there,
+     otherwise every edit and save adds the appellation (or the name) once more. */
+  function joinWine(producer, appellation, cuvee) {
+    var p = String(producer || '').trim(), a = String(appellation || '').trim(), c = String(cuvee || '').trim();
+    if (p && c.toLowerCase().indexOf(p.toLowerCase()) === 0) c = c.slice(p.length).replace(/^[\s\-–,]+/, '').trim();
+    var parts = [p];
+    if (a && a.toLowerCase() !== p.toLowerCase() && c.toLowerCase().indexOf(a.toLowerCase()) < 0) parts.push(a);
+    if (c) parts.push(c);
+    return parts.filter(Boolean).join(' ');
+  }
   function cellsFromWine(r) {
     var w = r.raw;
     return { vint: r.vint === 'NV' ? 'NV' : String(r.vint), producer: w.producer || '', name: wineNameOf(w), color: r.color, style: r.style, country: w.country || '', region: w.region || '',
