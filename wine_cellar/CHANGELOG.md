@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.19.6
+- Fixed wine names repeating or changing when you edit a wine: the appellation was added to the name again on every save. Wines already affected can be corrected by editing the name once.
+
 ## 0.19.5
 - Fixed the scan sheet on phones: the four buttons overflowed and overlapped, and *Use the camera* showed even where it cannot work. The buttons now wrap in two rows and only appear when they can work. *Use the camera* is translated.
 
