@@ -630,7 +630,7 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
   var fmtN = function (n) { return Math.round(n).toLocaleString(LOC); };
   var eur0, eur1, eur2, sek;
   var pct0 = function (x) { return Math.round(x * 100) + '%'; };
-  var cfg = { eurSek: 11, labelAi: false, autoPrices: false, sbProducts: 0, sbUpdated: null, settings: { country: '', currency: 'EUR', tempUnit: 'C', formats: 'auto', paper: 'A4', sekRate: 11 }, settingsSaved: false };
+  var cfg = { eurSek: 11, labelAi: false, autoPrices: false, sbProducts: 0, sbUpdated: null, settings: { country: '', currency: 'EUR', tempUnit: 'C', formats: 'auto', paper: 'A4', sekRate: 11, labelReading: 'auto' }, settingsSaved: false };
   var COUNTRY_LIST = null;
   var I18N = { code: 'en', dict: null, list: [] };
   function browserLocale() { if (I18N.code !== 'en') return I18N.code; try { return (navigator.languages && navigator.languages[0]) || navigator.language || 'en'; } catch (e) { return 'en'; } }
@@ -1566,6 +1566,11 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
       currency.addEventListener('change', sync); sync();
       var plChk = h('input', { type: 'checkbox', id: 's_places' }); plChk.checked = !!cur.places;
       var snChk = h('input', { type: 'checkbox', id: 's_notes' }); snChk.checked = !!cur.shelfNotes;
+      var lrSel = h('select', { 'class': 'in', id: 's_label', 'aria-label': 'Reading wine labels from photos' },
+        h('option', { value: 'auto', text: 'Automatically when I add a photo' }), h('option', { value: 'manual', text: 'Only when I tap Read the label' }), h('option', { value: 'off', text: 'Never, I enter everything by hand' }));
+      lrSel.value = cur.labelReading || 'auto';
+      var lrBox = h('div', { 'class': 'f', style: 'gap:6px' }, h('div', { 'class': 'lab', text: 'Reading wine labels' }), lrSel,
+        h('p', { 'class': 'note', text: 'When a photo of a label is added, the details can be filled in for you. Choose Never to type them yourself. Photos are only sent to Google if you have set a Gemini key.' }));
       var langSel = h('select', { 'class': 'in', 'aria-label': 'Language' }, h('option', { value: 'auto', text: 'Automatic' }));
       I18N.list.forEach(function (l) { langSel.appendChild(h('option', { value: l.code, text: l.name, translate: 'no' })); });
       langSel.value = lsGet('wc_lang') || 'auto'; if (!langSel.value) langSel.value = 'auto';
@@ -1577,18 +1582,18 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
         cur.places ? h('button', { type: 'button', 'class': 'btn', text: 'Manage places…', onclick: function () { openPlacesSheet(); } }) : h('p', { 'class': 'note', text: 'Turn this on and save, then add your places under More, Storage places. Your current shelf texts become places automatically.' }));
       var save = h('button', { type: 'button', 'class': 'btn primary', text: 'Save', onclick: function () {
         msg.textContent = ''; save.disabled = true;
-        var body = { country: country.value, currency: currency.value, tempUnit: unit.value, formats: fm.value, paper: paper.value, places: plChk.checked, shelfNotes: snChk.checked };
+        var body = { country: country.value, currency: currency.value, tempUnit: unit.value, formats: fm.value, paper: paper.value, places: plChk.checked, shelfNotes: snChk.checked, labelReading: lrSel.value };
         if (!sekBox.hidden) body.sekRate = rate.value.replace(',', '.');
         if (!convBox.hidden && conv.value.trim()) body.convertRate = conv.value.replace(',', '.');
         api('PUT', 'api/settings', body).then(function (res) {
-          cfg.settings = { country: res.country, currency: res.currency, tempUnit: res.tempUnit, formats: res.formats, paper: res.paper, sekRate: res.sekRate, places: res.places, shelfNotes: res.shelfNotes }; cfg.settingsSaved = true; cfg.eurSek = res.sekRate; madePlaces = res.placesMade || 0;
+          cfg.settings = { country: res.country, currency: res.currency, tempUnit: res.tempUnit, formats: res.formats, paper: res.paper, sekRate: res.sekRate, places: res.places, shelfNotes: res.shelfNotes, labelReading: res.labelReading || 'auto' }; cfg.settingsSaved = true; cfg.eurSek = res.sekRate; madePlaces = res.placesMade || 0;
           applyLocale(); return load();
         }).then(function () { toast(madePlaces ? 'Settings saved. ' + madePlaces + (madePlaces === 1 ? ' place was' : ' places were') + ' made from your shelf texts.' : 'Settings saved'); dlg.close(); }).catch(function (e) { msg.textContent = e.message; save.disabled = false; });
       } });
       var fld = function (t, n) { return h('div', { 'class': 'f', style: 'gap:6px' }, h('div', { 'class': 'lab', text: t }), n); };
       openSheet('Settings', h('div', { 'class': 'f', style: 'gap:14px' },
         h('p', { 'class': 'note', text: first ? 'Welcome. Choose where you live so prices, dates and units look right. You can change this later under More, Settings.' : 'Choose where you live. Picking a country suggests the currency, units and paper size, and you can still change each one.' }),
-        fld('Country', country), fld('Currency', currency), convBox, sekBox, fld('Temperature unit', unit), fld('Numbers and dates', fm), fld('Paper size for printing', paper), plBox,
+        fld('Country', country), fld('Currency', currency), convBox, sekBox, fld('Temperature unit', unit), fld('Numbers and dates', fm), fld('Paper size for printing', paper), plBox, lrBox,
         h('div', { 'class': 'f' }, h('div', { 'class': 'lab', text: 'On this device' }),
           langBox,
           h('div', { 'class': 'row' }, h('button', { type: 'button', 'class': 'btn', text: 'Appearance…', onclick: openAppearance }), h('button', { type: 'button', 'class': 'btn', text: 'Customise the menu…', onclick: openNavEditor })),
@@ -1819,6 +1824,7 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
     var ex = pre.existing || null, prod = pre.product || null;
     var raw = edit ? edit.raw : (ex ? ex.raw : null);
     var adding = !edit;
+    function labelMode() { return (cfg.settings && cfg.settings.labelReading) || 'auto'; }
     function inp(id, label, props, list) {
       var i = h('input', Object.assign({ 'class': 'in', id: 'f_' + id, autocomplete: 'off' }, props || {}));
       if (list) { i.setAttribute('list', 'dl_' + id); }
@@ -1873,7 +1879,7 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
     var ocrBox = h('div', { 'class': 'f' }), readBtn = h('button', { type: 'button', 'class': 'btn', text: 'Read the label', hidden: true, onclick: function () { if (photoBlob) readLabel(photoBlob); } });
     function takeFile(f) {
       photoErr.textContent = '';
-      shrink(f, 1600).then(function (b) { photoBlob = b; showPrev(URL.createObjectURL(b)); if (foundChk) { foundChk.checked = false; useFound = false; } labelReadable().then(function (ok) { readBtn.hidden = !ok; if (ok && adding && !ex) readLabel(b); }); })
+      shrink(f, 1600).then(function (b) { photoBlob = b; showPrev(URL.createObjectURL(b)); if (foundChk) { foundChk.checked = false; useFound = false; } labelReadable().then(function (ok) { readBtn.hidden = !ok || labelMode() === 'off'; if (ok && labelMode() === 'auto' && adding && !ex) readLabel(b); }); })
         .catch(function (e) { photoErr.textContent = e.message; });
     }
     fileIn.addEventListener('change', function () { var f = fileIn.files[0]; fileIn.value = ''; if (f) takeFile(f); });
@@ -2007,8 +2013,9 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
     if (pre.labelBlob) {
       photoBlob = pre.labelBlob; showPrev(URL.createObjectURL(pre.labelBlob));
       labelReadable().then(function (ok) {
-        readBtn.hidden = !ok;
-        if (ok) readLabel(pre.labelBlob);
+        readBtn.hidden = !ok || labelMode() === 'off';
+        if (labelMode() === 'off') return;
+        if (ok) { if (labelMode() === 'auto') readLabel(pre.labelBlob); }
         else ocrBox.replaceChildren(h('p', { 'class': 'note', text: 'The photo is added as the wine picture. Reading text from photos is not installed in this build of the add-on, so fill in the details by hand. On an iPhone or Mac you can tap a field and choose Scan Text to read the label with the system camera.' }));
       });
     }
@@ -2022,7 +2029,7 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
       var price = PR[1].value, value = VA[1].value || price;
       var vintageVal = nv ? 'NV' : (yearIn.value || 'NV');
       var data = {
-        producer: prodName, wine: joinWine(prodName, app, cuvee), vintage: vintageVal, color: color, style: style,
+        producer: prodName, wine: composeWine(prodName, cuvee), vintage: vintageVal, color: color, style: style,
         country: C[1].value, region: R[1].value, appellation: app, varietal: G[1].value, price: price || 0, value: value || 0,
         begin: B[1].value || null, end: E[1].value || null, location: L[1].value, notes: N.value, ean: EAN[1].value
       };
@@ -2823,16 +2830,6 @@ body.printlabels .dock,body.printmenu .dock{display:none!important}
   function plain(n) { return String(Math.round(n * 100) / 100); }
   function parseNum(s) { var t = String(s == null ? '' : s).replace(/[^0-9.,\-]/g, '').replace(',', '.'); if (t === '') return 0; var n = Number(t); return isFinite(n) ? n : NaN; }
   function wineNameOf(w) { var n = String(w.wine || '').trim(); if (w.producer && n.indexOf(w.producer) === 0) n = n.slice(w.producer.length).trim(); return n; }
-  /* The stored wine text is "producer appellation cuvée". Build it without repeating a part that is already there,
-     otherwise every edit and save adds the appellation (or the name) once more. */
-  function joinWine(producer, appellation, cuvee) {
-    var p = String(producer || '').trim(), a = String(appellation || '').trim(), c = String(cuvee || '').trim();
-    if (p && c.toLowerCase().indexOf(p.toLowerCase()) === 0) c = c.slice(p.length).replace(/^[\s\-–,]+/, '').trim();
-    var parts = [p];
-    if (a && a.toLowerCase() !== p.toLowerCase() && c.toLowerCase().indexOf(a.toLowerCase()) < 0) parts.push(a);
-    if (c) parts.push(c);
-    return parts.filter(Boolean).join(' ');
-  }
   function cellsFromWine(r) {
     var w = r.raw;
     return { vint: r.vint === 'NV' ? 'NV' : String(r.vint), producer: w.producer || '', name: wineNameOf(w), color: r.color, style: r.style, country: w.country || '', region: w.region || '',

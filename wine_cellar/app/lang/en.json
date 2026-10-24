@@ -777,6 +777,12 @@
   "Could not load the barcode reader": "Could not load the barcode reader",
   "Could not open the photo": "Could not open the photo",
   "Camera scanning needs Home Assistant opened over HTTPS. You can also photograph the barcode, use a scanner, or type the number.": "Camera scanning needs Home Assistant opened over HTTPS. You can also photograph the barcode, use a scanner, or type the number.",
-  "Use the camera": "Use the camera"
+  "Use the camera": "Use the camera",
+  "Automatically when I add a photo": "Automatically when I add a photo",
+  "Only when I tap Read the label": "Only when I tap Read the label",
+  "Never, I enter everything by hand": "Never, I enter everything by hand",
+  "Reading wine labels": "Reading wine labels",
+  "Reading wine labels from photos": "Reading wine labels from photos",
+  "When a photo of a label is added, the details can be filled in for you. Choose Never to type them yourself. Photos are only sent to Google if you have set a Gemini key.": "When a photo of a label is added, the details can be filled in for you. Choose Never to type them yourself. Photos are only sent to Google if you have set a Gemini key."
  }
 }

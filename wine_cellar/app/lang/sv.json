@@ -776,6 +776,12 @@
   "Could not load the barcode reader": "Kunde inte ladda streckkodsläsaren",
   "Could not open the photo": "Kunde inte öppna fotot",
   "Camera scanning needs Home Assistant opened over HTTPS. You can also photograph the barcode, use a scanner, or type the number.": "Kameraskanning kräver att Home Assistant öppnas via HTTPS. Du kan också fotografera streckkoden, använda en scanner eller skriva numret.",
-  "Use the camera": "Använd kameran"
+  "Use the camera": "Använd kameran",
+  "Automatically when I add a photo": "Automatiskt när jag lägger till ett foto",
+  "Only when I tap Read the label": "Bara när jag trycker på Läs etiketten",
+  "Never, I enter everything by hand": "Aldrig, jag skriver in allt själv",
+  "Reading wine labels": "Läsa vinetiketter",
+  "Reading wine labels from photos": "Läsa vinetiketter från foton",
+  "When a photo of a label is added, the details can be filled in for you. Choose Never to type them yourself. Photos are only sent to Google if you have set a Gemini key.": "När ett foto på en etikett läggs till kan uppgifterna fyllas i åt dig. Välj Aldrig för att skriva in dem själv. Foton skickas bara till Google om du har angett en Gemini-nyckel."
  }
 }

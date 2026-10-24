@@ -27,7 +27,7 @@ import drink  # noqa: E402
 import mqtt  # noqa: E402
 import pairing  # noqa: E402
 
-VERSION = "0.19.6"  # keep in step with wine_cellar/config.yaml (test_api.py checks it)
+VERSION = "0.19.7"  # keep in step with wine_cellar/config.yaml (test_api.py checks it)
 
 DB_TYPE = os.environ.get("DB_TYPE", "postgres")
 PORT = int(os.environ.get("PORT", "8099"))
@@ -1246,7 +1246,7 @@ def delete_review(rid):
 
 # ---------------------------------------------------------------- app settings (country, currency, units)
 def app_settings():
-    d = {"country": "", "currency": "EUR", "tempUnit": "C", "formats": "auto", "paper": "A4", "sekRate": EUR_SEK, "places": False, "shelfNotes": False}
+    d = {"country": "", "currency": "EUR", "tempUnit": "C", "formats": "auto", "paper": "A4", "sekRate": EUR_SEK, "places": False, "shelfNotes": False, "labelReading": "auto"}
     try:
         saved = json.loads(meta_get("app_settings") or "null")
     except ValueError:
@@ -1302,6 +1302,10 @@ def save_app_settings(data):
     for key in ("places", "shelfNotes"):
         if key in data:
             new[key] = bool(data.get(key))
+    if "labelReading" in data:
+        if data.get("labelReading") not in ("auto", "manual", "off"):
+            raise ApiError(400, "Label reading must be auto, manual or off")
+        new["labelReading"] = data["labelReading"]
     made = 0
     if new["places"] and not cur["places"]:
         made = enable_places()
@@ -1889,6 +1893,8 @@ def _restored_settings(saved):
         for k in ("places", "shelfNotes"):
             if k in a:
                 d[k] = bool(a[k])
+        if a.get("labelReading") in ("auto", "manual", "off"):
+            d["labelReading"] = a["labelReading"]
         out["app_settings"] = dict(app_settings()[0], **d)
     c = saved.get("climate")
     if isinstance(c, dict):

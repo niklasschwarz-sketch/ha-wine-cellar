@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.19.7
+- **Renaming a wine now sticks.** Saving the edit form no longer puts the appellation back in front of the name. The wine name you type is saved exactly as you typed it (after the producer). The appellation stays its own field.
+- **Label reading can be switched off.** Settings, *Reading wine labels*: *Automatically when I add a photo* (as before), *Only when I tap Read the label*, or *Never, I enter everything by hand*. With *Never*, a label photo is only used as the picture, nothing is filled in and nothing is sent to Google.
+
 ## 0.19.6
 - Fixed wine names repeating or changing when you edit a wine: the appellation was added to the name again on every save. Wines already affected can be corrected by editing the name once.
 

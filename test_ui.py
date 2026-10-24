@@ -501,6 +501,46 @@ try:
         GEMINI_MODE[0] = "ok"
         api("DELETE", "/api/wines/%d" % owned["id"])
 
+        # label reading can be switched to manual or off, and then nothing is filled in or sent
+        for mode in ("manual", "off"):
+            api("PUT", "/api/settings", {"labelReading": mode})
+            page.reload()
+            page.wait_for_selector("button.pic")
+            GEMINI_CALLS.clear()
+            page.click("#scanBtn")
+            page.wait_for_selector("dialog[open] button:has-text('Photograph the label')")
+            page.set_input_files("dialog[open] input[type=file]", PNG_FILE)
+            page.wait_for_selector("dialog[open] #f_producer")
+            page.wait_for_timeout(1200)
+            check("label reading %s: the form stays empty and nothing goes to Google" % mode, page.input_value("#f_producer") == "" and page.input_value("#f_cuvee") == "" and not GEMINI_CALLS, GEMINI_CALLS)
+            btn = page.locator("dialog[open] button:has-text('Read the label')")
+            check("label reading %s: the Read the label button is %s" % (mode, "there" if mode == "manual" else "hidden"), (btn.count() > 0 and btn.first.is_visible()) == (mode == "manual"))
+            if mode == "manual":
+                btn.first.click()
+                page.wait_for_function("() => document.querySelector('#f_producer').value === 'Domaine Test'", timeout=10000)
+                check("manual: tapping Read the label fills the form", len(GEMINI_CALLS) == 1, GEMINI_CALLS)
+            page.keyboard.press("Escape")
+        api("PUT", "/api/settings", {"labelReading": "auto"})
+        page.reload()
+        page.wait_for_selector("button.pic")
+
+        # renaming a wine keeps exactly the name you type, whatever the appellation is
+        rn = api("POST", "/api/wines", {"producer": "Rename Estate", "wine": "Rename Estate Margaux Old Cuvee", "appellation": "Margaux", "vintage": 2018, "color": "Red", "quantity": 1})
+        page.reload()
+        page.wait_for_selector("button.pic")
+        page.fill("#q", "Rename Estate")
+        page.wait_for_function("() => document.querySelectorAll('.wname > button.lnk').length === 1")
+        page.locator(".wname > button.lnk").first.click()
+        page.click("dialog[open] button:has-text('Edit')")
+        page.wait_for_selector("dialog[open] #f_cuvee")
+        page.fill("#f_cuvee", "Brand New Name")
+        page.click("dialog[open] button:has-text('Save changes')")
+        page.wait_for_function("() => !document.querySelector('dialog[open] #f_cuvee')")
+        after = [w for w in api("GET", "/api/wines")["wines"] if w["id"] == rn["id"]][0]
+        check("a renamed wine is saved with the name you typed", after["wine"] == "Rename Estate Brand New Name" and after["appellation"] == "Margaux", after["wine"])
+        api("DELETE", "/api/wines/%d" % rn["id"])
+        page.fill("#q", "")
+
         # ---- appearance: dark mode and text size are chosen in the page and kept in the browser
         page.click("#dk_settings")
         page.click("dialog[open] button:has-text('Appearance…')")

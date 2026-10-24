@@ -547,6 +547,11 @@ try:
     check("unknown country is refused", call("PUT", "/api/settings", {"country": "XX"})[0] == 400)
     check("unknown currency is refused", call("PUT", "/api/settings", {"currency": "ZZZ"})[0] == 400)
     check("bad paper is refused", call("PUT", "/api/settings", {"paper": "A3"})[0] == 400)
+    check("label reading starts on automatic", call("GET", "/api/settings")[1]["labelReading"] == "auto")
+    check("bad label reading mode is refused", call("PUT", "/api/settings", {"labelReading": "sometimes"})[0] == 400)
+    s, st = call("PUT", "/api/settings", {"labelReading": "off"})
+    check("label reading can be turned off", s == 200 and st["labelReading"] == "off" and call("GET", "/api/config")[1]["settings"]["labelReading"] == "off", st)
+    call("PUT", "/api/settings", {"labelReading": "auto"})
     check("bad exchange rate is refused", call("PUT", "/api/settings", {"sekRate": "-1"})[0] == 400)
     before = [w["price"] for w in call("GET", "/api/wines")[1]["wines"]]
     s, st = call("PUT", "/api/settings", {"country": "US", "currency": "USD", "paper": "Letter", "formats": "country", "convertRate": "2"})
@@ -687,7 +692,7 @@ try:
 
     # ---- full copy, with pictures, and restore
     bk = call("GET", "/api/backup.json")[1]
-    check("the full copy carries version, settings and drink alert settings", bk["version"] == "0.19.6" and bk["picturesIncluded"] is True and bk["settings"]["alerts"]["weekday"] == 2, (bk.get("version"), bk.get("settings")))
+    check("the full copy carries version, settings and drink alert settings", bk["version"] == "0.19.7" and bk["picturesIncluded"] is True and bk["settings"]["alerts"]["weekday"] == 2, (bk.get("version"), bk.get("settings")))
     withpic = [w for w in bk["wines"] if w.get("pictureData")]
     check("pictures travel inside the full copy", len(withpic) >= 1 and withpic[0].get("pictureMime"), len(withpic))
     small = call("GET", "/api/backup.json?pictures=0")[1]
